@@ -1,4 +1,4 @@
-// app/book/map/page.tsx
+// app/book/map/BookMapClient.tsx
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -732,6 +732,47 @@ function CalendarIcon() {
   )
 }
 
+function CartIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.5 3H5l2.6 12.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.7L21 7H6.2" />
+    </svg>
+  )
+}
+
+function ProfileIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="8" r="4" />
+    </svg>
+  )
+}
+
 function TicketIcon() {
   return (
     <svg
@@ -1035,8 +1076,10 @@ export default function BookMapPage() {
           controlsBottomOffset={mapControlsBottomOffset}
         />
 
-        {/* ADDED: floating translucent top controls.
-            Back button and date pill are inline and no longer consume layout space. */}
+        {/* PRESERVED FOR TRUST / FUTURE ITERATION:
+            Original top controls are intentionally commented out instead of deleted.
+            This included the old back button, date button, and separate top-right cart button.
+
         <div
           style={{
             position: "fixed",
@@ -1153,12 +1196,183 @@ export default function BookMapPage() {
             <span>{cartCount}</span>
           </button>
         ) : null}
+        */}
+
+        {/* ADDED: new floating pill header.
+            This only changes the top visual controls and does not touch existing state logic or map logic. */}
+        <div
+          style={{
+            position: "fixed",
+            top: 14,
+            left: 14,
+            right: 14,
+            zIndex: 95,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            pointerEvents: "none",
+          }}
+        >
+          <button
+            onClick={() => router.back()}
+            style={{
+              pointerEvents: "auto",
+              width: 42,
+              height: 42,
+              borderRadius: 999,
+              border: `1px solid rgba(217,232,236,0.78)`,
+              background: "rgba(255,255,255,0.68)",
+              color: COLORS.text,
+              fontSize: 15,
+              fontWeight: 800,
+              cursor: "pointer",
+              flexShrink: 0,
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
+            }}
+            aria-label="Go back"
+          >
+            ←
+          </button>
+
+          <div
+            style={{
+              pointerEvents: "auto",
+              flex: 1,
+              minWidth: 0,
+              height: 50,
+              padding: "6px",
+              borderRadius: 999,
+              border: `1px solid rgba(217,232,236,0.82)`,
+              background: "rgba(255,255,255,0.70)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              boxShadow: "0 16px 32px rgba(15,23,42,0.14)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            {mounted ? (
+              <button
+                onClick={() => router.push("/book")}
+                style={{
+                  height: "100%",
+                  minWidth: 0,
+                  flex: 1,
+                  padding: "0 14px",
+                  borderRadius: 999,
+                  border: `1px solid rgba(217,232,236,0.88)`,
+                  background: "rgba(247,251,252,0.92)",
+                  color: COLORS.text,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
+                }}
+                aria-label="Change date"
+              >
+                <CalendarIcon />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {formatDisplayDate(date)}
+                </span>
+              </button>
+            ) : (
+              <div
+                style={{
+                  flex: 1,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: "rgba(247,251,252,0.92)",
+                }}
+              />
+            )}
+
+            <button
+              onClick={() => router.push("/book/cart")}
+              aria-label="Open cart"
+              title="Open cart"
+              style={{
+                position: "relative",
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                border: `1px solid rgba(217,232,236,0.88)`,
+                background: "rgba(255,255,255,0.92)",
+                color: COLORS.text,
+                display: "grid",
+                placeItems: "center",
+                cursor: "pointer",
+                flexShrink: 0,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+              }}
+            >
+              <CartIcon />
+              {cartCount > 0 ? (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 5px",
+                    borderRadius: 999,
+                    background: COLORS.primaryHover,
+                    color: "#fff",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    display: "grid",
+                    placeItems: "center",
+                    boxShadow: "0 6px 12px rgba(2,132,199,0.24)",
+                  }}
+                >
+                  {cartCount}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              onClick={() => router.push("/profile")}
+              aria-label="Open profile"
+              title="Open profile"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                border: `1px solid rgba(217,232,236,0.88)`,
+                background: "rgba(255,255,255,0.92)",
+                color: COLORS.text,
+                display: "grid",
+                placeItems: "center",
+                cursor: "pointer",
+                flexShrink: 0,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+              }}
+            >
+              <ProfileIcon />
+            </button>
+          </div>
+        </div>
 
         {cartMessage ? (
           <div
             style={{
               position: "fixed",
-              top: 118,
+              top: 78,
               left: 14,
               right: 14,
               zIndex: 96,
@@ -1181,7 +1395,7 @@ export default function BookMapPage() {
           <div
             style={{
               position: "fixed",
-              top: cartMessage ? 172 : 118,
+              top: cartMessage ? 132 : 78,
               left: 14,
               right: 14,
               zIndex: 96,
@@ -1411,22 +1625,7 @@ export default function BookMapPage() {
                   position: "relative",
                 }}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="23"
-                  height="23"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="8" cy="21" r="1" />
-                  <circle cx="19" cy="21" r="1" />
-                  <path d="M2.5 3H5l2.6 12.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.7L21 7H6.2" />
-                </svg>
+                <CartIcon />
 
                 {cartCount > 0 ? (
                   <span
