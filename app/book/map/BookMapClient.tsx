@@ -10,6 +10,7 @@ import AreaSelectionModal from "@/app/components/booking/AreaSelectionModal"
 import { getZoneStatus, venueZones } from "@/app/lib/booking-data"
 import { passProducts } from "@/app/lib/book-pass-data"
 import { useBookingCart } from "@/app/lib/booking-cart"
+import Image from "next/image"
 
 function formatDisplayDate(dateKey: string) {
   if (!dateKey) return "No date selected"
@@ -727,22 +728,89 @@ function TicketIcon() {
 function DiamondIcon() {
   return (
     <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+      xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <polygon points="7,5 17,5 21,10 12,20 3,10" />
       <path d="M3 10h18" />
       <path d="M7 5l2.8 5" />
       <path d="M17 5l-2.8 5" />
       <path d="M9.8 10 12 20l2.2-10" />
+    </svg>
+  )
+}
+
+function PulseIcon() {
+  return (
+    <Image
+      src="/images/pulse-icon.jpg"
+      alt=""
+      width={22}
+      height={22}
+      aria-hidden="true"
+    />
+  )
+}
+
+function EchoIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="32"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M8.95 8.05 h5.05 c1.9 0 3.45 1.55 3.45 3.45 s-1.55 3.45-3.45 3.45 h-2 l-2.55 1.75 v-1.75 H8.95 c-1.9 0-3.45-1.55-3.45-3.45 s1.55-3.45 3.45-3.45 Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* RIGHT ARCS */}
+      {/* <path
+        d="M18.15 10.15a2.55 2.55 0 0 1 0 3.7"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      /> */}
+      <path
+        d="M20.45 8.45a4.95 4.95 0 0 1 0 7.1"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M22.45 6.85a7 7 0 0 1 0 10.3"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* LEFT ARCS */}
+      {/* <path
+        d="M5.85 13.85a2.55 2.55 0 0 1 0-3.7"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      /> */}
+      <path
+        d="M3.55 15.55a4.95 4.95 0 0 1 0-7.1"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M1.55 17.15a7 7 0 0 1 0-10.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -1460,6 +1528,30 @@ export default function BookMapPage() {
                 <DiamondIcon />
                 <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
                   Promotions
+                </div>
+              </button>
+
+              <button
+                onClick={() => router.push("/echo")}
+                // onClick={() => {
+                //   setPassesCardOpen(true)
+                //   setPassModalOpen(true)
+                // }}
+                aria-label="Open pulse"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: COLORS.primaryHover,
+                  width: 56,
+                  height: 56,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <EchoIcon />
+                <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
+                  Echo
                 </div>
               </button>
 
