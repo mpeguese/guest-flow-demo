@@ -7,7 +7,10 @@ import MobileShell from "@/app/components/booking/MobileShell"
 import StripeCheckoutForm from "@/app/components/booking/StripeCheckoutForm"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
-import { generateReservationCode, saveLatestReservation,} from "@/app/lib/reservation-confirmation"
+import {
+  generateReservationCode,
+  saveLatestReservation,
+} from "@/app/lib/reservation-confirmation"
 
 function formatDate(dateKey: string) {
   if (!dateKey) return "Not selected"
@@ -40,6 +43,9 @@ export default function DetailsPage() {
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
 
+  const zoneCount = items.filter((item) => (item.itemType || "zone") === "zone").length
+  const passCount = items.filter((item) => item.itemType === "pass").length
+
   async function initializeCheckout() {
     try {
       setCheckoutError("")
@@ -53,6 +59,8 @@ export default function DetailsPage() {
         },
         body: JSON.stringify({
           items: items.map((item) => ({
+            itemType: item.itemType,
+            productId: item.productId,
             zoneId: item.zoneId,
             date: item.date,
             partySize: item.partySize,
@@ -86,6 +94,8 @@ export default function DetailsPage() {
         total: pricing.total,
         items: items.map((item) => ({
           id: item.id,
+          itemType: item.itemType || "zone",
+          productId: item.productId || item.zoneId,
           zoneId: item.zoneId,
           zoneName: item.zoneName,
           section: item.section,
@@ -168,7 +178,7 @@ export default function DetailsPage() {
                   color: "#64748B",
                 }}
               >
-                Add one or more locations before starting payment.
+                Add one or more locations or passes before starting payment.
               </div>
             </div>
           </div>
@@ -242,7 +252,11 @@ export default function DetailsPage() {
                 lineHeight: 1.55,
               }}
             >
-              You’re checking out {cartCount} selected location{cartCount > 1 ? "s" : ""}.
+              You’re checking out {cartCount} item{cartCount > 1 ? "s" : ""}
+              {zoneCount > 0 || passCount > 0
+                ? ` • ${zoneCount} location${zoneCount === 1 ? "" : "s"} • ${passCount} pass${passCount === 1 ? "" : "es"}`
+                : ""}
+              .
             </p>
           </div>
 
@@ -322,8 +336,8 @@ export default function DetailsPage() {
                         color: "#64748B",
                       }}
                     >
-                      {item.section} · {formatDate(item.date)} · {item.partySize} guests ·{" "}
-                      {item.session}
+                      {item.section} · {formatDate(item.date)} · {item.partySize} guest
+                      {item.partySize === "1" ? "" : "s"} · {item.session}
                     </div>
                   </div>
 

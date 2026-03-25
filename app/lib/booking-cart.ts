@@ -3,9 +3,18 @@
 
 import { useEffect, useMemo, useState } from "react"
 
+export type BookingCartItemType = "zone" | "pass"
+
 export type BookingCartItem = {
   id: string
+
+  // enhanced typing for mixed carts
+  itemType?: BookingCartItemType
+  productId?: string
+
+  // preserved for existing zone logic / compatibility
   zoneId: string
+
   zoneName: string
   section: string
   date: string
@@ -22,6 +31,22 @@ function isBrowser() {
   return typeof window !== "undefined"
 }
 
+function normalizeCartItem(item: BookingCartItem): BookingCartItem {
+  const itemType =
+    item.itemType ||
+    (item.section === "Guest Entry Pass" || item.session === "entry" ? "pass" : "zone")
+
+  const productId =
+    item.productId ||
+    (itemType === "pass" ? item.zoneId.split("-").slice(0, -1).join("-") || item.zoneId : item.zoneId)
+
+  return {
+    ...item,
+    itemType,
+    productId,
+  }
+}
+
 function readCart(): BookingCartItem[] {
   if (!isBrowser()) return []
 
@@ -30,7 +55,9 @@ function readCart(): BookingCartItem[] {
     if (!raw) return []
 
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.map((item) => normalizeCartItem(item as BookingCartItem))
   } catch {
     return []
   }
@@ -42,21 +69,28 @@ function writeCart(items: BookingCartItem[]) {
   window.dispatchEvent(new Event(CART_EVENT))
 }
 
-function itemKey(item: Pick<BookingCartItem, "zoneId" | "date" | "session">) {
+function itemKey(
+  item: Pick<BookingCartItem, "itemType" | "productId" | "zoneId" | "date" | "session" | "id">
+) {
+  if (item.itemType === "pass") {
+    return item.id
+  }
+
   return `${item.zoneId}__${item.date}__${item.session}`
 }
 
 export function addCartItem(item: BookingCartItem) {
+  const normalizedItem = normalizeCartItem(item)
   const current = readCart()
   const exists = current.some(
-    (existing) => itemKey(existing) === itemKey(item)
+    (existing) => itemKey(existing) === itemKey(normalizedItem)
   )
 
   if (exists) {
     return { added: false, items: current }
   }
 
-  const next = [...current, item]
+  const next = [...current, normalizedItem]
   writeCart(next)
   return { added: true, items: next }
 }

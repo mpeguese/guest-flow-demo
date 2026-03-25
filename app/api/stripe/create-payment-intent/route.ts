@@ -1,10 +1,13 @@
 // app/api/stripe/create-payment-intent/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { venueZones } from "@/app/lib/booking-data"
+import { getPassProductById } from "@/app/lib/book-pass-data"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
 import { stripe } from "@/app/lib/stripe"
 
 type CheckoutItem = {
+  itemType?: "zone" | "pass"
+  productId?: string
   zoneId: string
   date: string
   partySize: string
@@ -33,6 +36,29 @@ export async function POST(req: NextRequest) {
         )
       }
 
+      const inferredType =
+        item.itemType ||
+        (item.session === "entry" ? "pass" : "zone")
+
+      if (inferredType === "pass") {
+        const passId =
+          item.productId ||
+          item.zoneId.split("-").slice(0, -1).join("-") ||
+          item.zoneId
+
+        const pass = getPassProductById(passId)
+
+        if (!pass) {
+          return NextResponse.json(
+            { error: `Selected pass was not found: ${passId}` },
+            { status: 404 }
+          )
+        }
+
+        subtotal += pass.price
+        continue
+      }
+
       const zone = venueZones.find((z) => z.id === item.zoneId)
 
       if (!zone) {
@@ -55,7 +81,11 @@ export async function POST(req: NextRequest) {
       },
       metadata: {
         itemCount: String(items.length),
-        zoneIds: items.map((item) => item.zoneId).join(",").slice(0, 500),
+        itemTypes: items.map((item) => item.itemType || (item.session === "entry" ? "pass" : "zone")).join(",").slice(0, 500),
+        productIds: items
+          .map((item) => item.productId || item.zoneId)
+          .join(",")
+          .slice(0, 500),
       },
     })
 

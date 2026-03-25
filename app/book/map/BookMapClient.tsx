@@ -8,6 +8,7 @@ import VenueMap from "@/app/components/booking/VenueMap"
 import ZoneDetailsCard from "@/app/components/booking/ZoneDetailsCard"
 import AreaSelectionModal from "@/app/components/booking/AreaSelectionModal"
 import { getZoneStatus, venueZones } from "@/app/lib/booking-data"
+import { passProducts } from "@/app/lib/book-pass-data"
 import { useBookingCart } from "@/app/lib/booking-cart"
 
 function formatDisplayDate(dateKey: string) {
@@ -88,17 +89,10 @@ const COLORS = {
   dangerSoft: "#FEE2E2",
 } as const
 
-type PassOption = {
-  id: string
-  title: string
-  subtitle: string
-  price: number
-  benefits: string[]
-  imageSrc: string
-}
-
 type FrozenSelection = {
   id: string
+  itemType?: "zone" | "pass"
+  productId?: string
   zoneId: string
   zoneName: string
   section: string
@@ -108,25 +102,6 @@ type FrozenSelection = {
   price: number
   imageSrc?: string
 }
-
-const PASS_OPTIONS: PassOption[] = [
-  {
-    id: "free-rsvp",
-    title: "Free RSVP",
-    subtitle: "Reserve your entry in advance",
-    price: 0,
-    benefits: ["Priority reservation list", "Mobile check-in ready", "Faster guest entry"],
-    imageSrc: "/images/tangra-interior.jpg",
-  },
-  {
-    id: "general-entry",
-    title: "General Entry",
-    subtitle: "Pre-purchase and skip the line",
-    price: 25,
-    benefits: ["Skip-the-line access", "Guaranteed entry window", "Fast QR check-in"],
-    imageSrc: "/images/table-preview.jpg",
-  },
-]
 
 function PassPurchaseModal({
   open,
@@ -447,7 +422,7 @@ function PassPurchaseModal({
             </div>
 
             <div style={{ display: "grid", gap: 14 }}>
-              {PASS_OPTIONS.map((pass) => {
+              {passProducts.map((pass) => {
                 const qty = quantities[pass.id] || 0
 
                 return (
@@ -712,18 +687,7 @@ function PassPurchaseModal({
 
 function CalendarIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="4" width="18" height="18" rx="3" ry="3" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
@@ -734,18 +698,7 @@ function CalendarIcon() {
 
 function CartIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="19"
-      height="19"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="8" cy="21" r="1" />
       <circle cx="19" cy="21" r="1" />
       <path d="M2.5 3H5l2.6 12.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.7L21 7H6.2" />
@@ -755,18 +708,7 @@ function CartIcon() {
 
 function ProfileIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="19"
-      height="19"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 21a8 8 0 0 0-16 0" />
       <circle cx="12" cy="8" r="4" />
     </svg>
@@ -775,20 +717,32 @@ function ProfileIcon() {
 
 function TicketIcon() {
   return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 9.5V7.2A2.2 2.2 0 0 1 6.2 5h11.6A2.2 2.2 0 0 1 20 7.2v2.3a2.2 2.2 0 0 0 0 5v2.3a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 16.8v-2.3a2.2 2.2 0 0 0 0-5Z" />
+      <path d="M12 7.5v9" strokeDasharray="2.5 2.5" />
+    </svg>
+  )
+}
+
+function DiamondIcon() {
+  return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="23"
-      height="23"
+      width="22"
+      height="22"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.9"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M4 9.5V7.2A2.2 2.2 0 0 1 6.2 5h11.6A2.2 2.2 0 0 1 20 7.2v2.3a2.2 2.2 0 0 0 0 5v2.3a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 16.8v-2.3a2.2 2.2 0 0 0 0-5Z" />
-      <path d="M12 7.5v9" strokeDasharray="2.5 2.5" />
+      <polygon points="7,5 17,5 21,10 12,20 3,10" />
+      <path d="M3 10h18" />
+      <path d="M7 5l2.8 5" />
+      <path d="M17 5l-2.8 5" />
+      <path d="M9.8 10 12 20l2.2-10" />
     </svg>
   )
 }
@@ -886,6 +840,8 @@ export default function BookMapPage() {
 
     return {
       id: `${selectedZone.id}-${date}-${session || "unset-session"}`,
+      itemType: "zone",
+      productId: selectedZone.id,
       zoneId: selectedZone.id,
       zoneName: selectedZone.name,
       section: selectedZone.section,
@@ -1016,7 +972,7 @@ export default function BookMapPage() {
   }
 
   function handleAddPassesToCart() {
-    const selectedEntries = PASS_OPTIONS.filter((pass) => (passQuantities[pass.id] || 0) > 0)
+    const selectedEntries = passProducts.filter((pass) => (passQuantities[pass.id] || 0) > 0)
     if (selectedEntries.length === 0) return
 
     let addedCount = 0
@@ -1027,6 +983,8 @@ export default function BookMapPage() {
       for (let i = 0; i < qty; i += 1) {
         const item = {
           id: `${pass.id}-${passDate}-${i + 1}`,
+          itemType: "pass" as const,
+          productId: pass.id,
           zoneId: `${pass.id}-${i + 1}`,
           zoneName: pass.title,
           section: "Guest Entry Pass",
@@ -1065,8 +1023,6 @@ export default function BookMapPage() {
           background: COLORS.bg,
         }}
       >
-        {/* ADDED: immersive full-screen map background layout.
-            Removed the old "Choose Your Area" heading block without touching map math. */}
         <VenueMap
           zones={filteredZones}
           statusByZoneId={statusByZoneId}
@@ -1076,130 +1032,6 @@ export default function BookMapPage() {
           controlsBottomOffset={mapControlsBottomOffset}
         />
 
-        {/* PRESERVED FOR TRUST / FUTURE ITERATION:
-            Original top controls are intentionally commented out instead of deleted.
-            This included the old back button, date button, and separate top-right cart button.
-
-        <div
-          style={{
-            position: "fixed",
-            top: 14,
-            left: 14,
-            right: 14,
-            zIndex: 95,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            pointerEvents: "none",
-          }}
-        >
-          <button
-            onClick={() => router.back()}
-            style={{
-              pointerEvents: "auto",
-              height: 42,
-              minWidth: 42,
-              padding: "0 14px",
-              borderRadius: 999,
-              border: `1px solid rgba(217,232,236,0.72)`,
-              background: "rgba(255,255,255,0.52)",
-              color: COLORS.text,
-              fontSize: 15,
-              fontWeight: 800,
-              cursor: "pointer",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              boxShadow: "0 10px 20px rgba(15,23,42,0.10)",
-            }}
-            aria-label="Go back"
-          >
-            ←
-          </button>
-
-          {mounted ? (
-            <button
-              onClick={() => router.push("/book")}
-              style={{
-                pointerEvents: "auto",
-                height: 42,
-                padding: "0 14px",
-                borderRadius: 999,
-                border: `1px solid rgba(217,232,236,0.72)`,
-                background: "rgba(255,255,255,0.52)",
-                color: COLORS.text,
-                fontSize: 13,
-                fontWeight: 800,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                boxShadow: "0 10px 20px rgba(15,23,42,0.10)",
-              }}
-              aria-label="Change date"
-            >
-              <CalendarIcon />
-              <span>{formatDisplayDate(date)}</span>
-            </button>
-          ) : (
-            <div style={{ width: 140, height: 42 }} />
-          )}
-        </div>
-
-        {cartCount > 0 ? (
-          <button
-            onClick={() => router.push("/book/cart")}
-            aria-label={`Open cart with ${cartCount} item${cartCount > 1 ? "s" : ""}`}
-            title="Open cart"
-            style={{
-              position: "fixed",
-              top: 66,
-              right: 14,
-              zIndex: 95,
-              height: 42,
-              minWidth: 42,
-              padding: "0 12px",
-              borderRadius: 999,
-              border: `1px solid rgba(217,232,236,0.72)`,
-              background: "rgba(255,255,255,0.58)",
-              color: COLORS.text,
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: "pointer",
-              boxShadow: "0 10px 20px rgba(15,23,42,0.10)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="8" cy="21" r="1" />
-              <circle cx="19" cy="21" r="1" />
-              <path d="M2.5 3H5l2.6 12.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.7L21 7H6.2" />
-            </svg>
-            <span>{cartCount}</span>
-          </button>
-        ) : null}
-        */}
-
-        {/* ADDED: new floating pill header.
-            This only changes the top visual controls and does not touch existing state logic or map logic. */}
         <div
           style={{
             position: "fixed",
@@ -1281,12 +1113,7 @@ export default function BookMapPage() {
                 aria-label="Change date"
               >
                 <CalendarIcon />
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
                   {formatDisplayDate(date)}
                 </span>
               </button>
@@ -1418,8 +1245,8 @@ export default function BookMapPage() {
           <div
             style={{
               position: "fixed",
-              left: 50,
-              right: 50,
+              left: 100,
+              right: 100,
               bottom: "calc(env(safe-area-inset-bottom, 0px) + 82px)",
               zIndex: 70,
             }}
@@ -1443,13 +1270,13 @@ export default function BookMapPage() {
                 style={{
                   position: "absolute",
                   top: 6,
-                  right: 10,
+                  right: 15,
                   border: "none",
                   background: "transparent",
                   padding: 0,
                   margin: 0,
                   color: COLORS.textMuted,
-                  fontSize: 18,
+                  fontSize: 24,
                   lineHeight: 1,
                   cursor: "pointer",
                   zIndex: 2,
@@ -1553,8 +1380,6 @@ export default function BookMapPage() {
           onAddPassesToCart={handleAddPassesToCart}
         />
 
-        {/* ADDED: full-width bottom nav.
-            This no longer uses maxWidth: 430, which was the constraint making it look centered/narrow. */}
         <div
           style={{
             position: "fixed",
@@ -1608,6 +1433,34 @@ export default function BookMapPage() {
                 }}
               >
                 <TicketIcon />
+                <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
+                  Ticket
+                </div>
+              </button>
+
+               {/* ADDITIONAL BUTTON LOGIC */}
+              <button
+                onClick={() => setCartMessage("Promotions coming soon!")}
+                // onClick={() => {
+                //   setPassesCardOpen(true)
+                //   setPassModalOpen(true)
+                // }}
+                aria-label="Open passes"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: COLORS.primaryHover,
+                  width: 56,
+                  height: 56,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <DiamondIcon />
+                <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
+                  Promotions
+                </div>
               </button>
 
               <button
@@ -1648,7 +1501,12 @@ export default function BookMapPage() {
                     {cartCount}
                   </span>
                 ) : null}
+                <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
+                  Cart
+                </div>
               </button>
+
+               
             </div>
           </div>
         </div>
