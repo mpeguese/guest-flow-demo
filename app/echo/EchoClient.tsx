@@ -1,12 +1,13 @@
 //app/echo/EchoClient.tsx
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import EchoPostCard, { type EchoPost } from "../components/echo/EchoPostCard"
 import EchoHeader from "../components/echo/EchoHeader"
 import EchoThreadSheet from "../components/echo/EchoThreadSheet"
 import EchoComposer from "../components/echo/EchoComposer"
 import EchoFilterTabs, { type EchoFilter,} from "../components/echo/EchoFilterTabs"
+import EchoAvatarModal from "../components/echo/EchoAvatarModal"
 
 
 type EchoBadge = "Here Now" | "Attended" | "Booked Table" | "VIP"
@@ -21,28 +22,28 @@ type EchoReply = {
 const POST_LIMIT = 140
 const REPLY_LIMIT = 120
 
-const BADGE_STYLES: Record<EchoBadge, { bg: string; color: string; border: string }> = {
-  "Here Now": {
-    bg: "rgba(16, 185, 129, 0.12)",
-    color: "#047857",
-    border: "rgba(16, 185, 129, 0.2)",
-  },
-  Attended: {
-    bg: "rgba(59, 130, 246, 0.11)",
-    color: "#1D4ED8",
-    border: "rgba(59, 130, 246, 0.18)",
-  },
-  "Booked Table": {
-    bg: "rgba(245, 158, 11, 0.13)",
-    color: "#B45309",
-    border: "rgba(245, 158, 11, 0.2)",
-  },
-  VIP: {
-    bg: "rgba(168, 85, 247, 0.11)",
-    color: "#7C3AED",
-    border: "rgba(168, 85, 247, 0.18)",
-  },
-}
+// const BADGE_STYLES: Record<EchoBadge, { bg: string; color: string; border: string }> = {
+//   "Here Now": {
+//     bg: "rgba(16, 185, 129, 0.12)",
+//     color: "#047857",
+//     border: "rgba(16, 185, 129, 0.2)",
+//   },
+//   Attended: {
+//     bg: "rgba(59, 130, 246, 0.11)",
+//     color: "#1D4ED8",
+//     border: "rgba(59, 130, 246, 0.18)",
+//   },
+//   "Booked Table": {
+//     bg: "rgba(245, 158, 11, 0.13)",
+//     color: "#B45309",
+//     border: "rgba(245, 158, 11, 0.2)",
+//   },
+//   VIP: {
+//     bg: "rgba(168, 85, 247, 0.11)",
+//     color: "#7C3AED",
+//     border: "rgba(168, 85, 247, 0.18)",
+//   },
+// }
 
 const TAG_OPTIONS = [
   "Packed",
@@ -61,6 +62,7 @@ const INITIAL_POSTS: EchoPost[] = [
   {
     id: "p1",
     author: "Mia R.",
+    avatarUrl: "/images/avatars/mia.jpg",
     text: "Crowd really picked up after 11. Energy is strong and the DJ is carrying tonight.",
     badge: "Here Now",
     tags: ["High Energy", "Good Music"],
@@ -76,6 +78,7 @@ const INITIAL_POSTS: EchoPost[] = [
   {
     id: "p2",
     author: "Andre T.",
+    avatarUrl: "/images/avatars/andre.jpg",
     text: "Table section looks great tonight. More polished crowd than usual.",
     badge: "Booked Table",
     tags: ["Upscale", "VIP Crowd"],
@@ -90,6 +93,7 @@ const INITIAL_POSTS: EchoPost[] = [
   {
     id: "p3",
     author: "Lena",
+    avatarUrl: "/images/avatars/lena.jpg",
     text: "Entry moved faster than I expected. Worth pulling up before midnight.",
     badge: "Here Now",
     tags: ["Fast Entry", "Worth It"],
@@ -115,6 +119,7 @@ const INITIAL_POSTS: EchoPost[] = [
   {
     id: "p5",
     author: "Sasha",
+    avatarUrl: "/images/avatars/sasha.jpg",
     text: "Line was slow earlier but inside feels worth it now. Music definitely saved the night.",
     badge: "Attended",
     tags: ["Long Line", "Good Music"],
@@ -130,21 +135,21 @@ const INITIAL_POSTS: EchoPost[] = [
   },
 ]
 
-function formatMinutesAgo(minutesAgo: number) {
-  if (minutesAgo < 1) return "now"
-  if (minutesAgo < 60) return `${minutesAgo}m`
-  const hours = Math.floor(minutesAgo / 60)
-  return `${hours}h`
-}
+// function formatMinutesAgo(minutesAgo: number) {
+//   if (minutesAgo < 1) return "now"
+//   if (minutesAgo < 60) return `${minutesAgo}m`
+//   const hours = Math.floor(minutesAgo / 60)
+//   return `${hours}h`
+// }
 
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
-}
+// function getInitials(name: string) {
+//   return name
+//     .split(" ")
+//     .map((part) => part[0])
+//     .join("")
+//     .slice(0, 2)
+//     .toUpperCase()
+// }
 
 function sortPosts(posts: EchoPost[], filter: EchoFilter) {
   if (filter === "hereNow") {
@@ -163,39 +168,39 @@ function sortPosts(posts: EchoPost[], filter: EchoFilter) {
   return [...posts].sort((a, b) => a.minutesAgo - b.minutesAgo)
 }
 
-function EchoBadgePill({ badge }: { badge: EchoBadge }) {
-  const style = BADGE_STYLES[badge]
+// function EchoBadgePill({ badge }: { badge: EchoBadge }) {
+//   const style = BADGE_STYLES[badge]
 
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "6px 10px",
-        borderRadius: 999,
-        background: style.bg,
-        color: style.color,
-        border: `1px solid ${style.border}`,
-        fontSize: 12,
-        fontWeight: 800,
-        letterSpacing: 0.2,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: 999,
-          background: style.color,
-          flex: "0 0 auto",
-        }}
-      />
-      {badge}
-    </div>
-  )
-}
+//   return (
+//     <div
+//       style={{
+//         display: "inline-flex",
+//         alignItems: "center",
+//         gap: 6,
+//         padding: "6px 10px",
+//         borderRadius: 999,
+//         background: style.bg,
+//         color: style.color,
+//         border: `1px solid ${style.border}`,
+//         fontSize: 12,
+//         fontWeight: 800,
+//         letterSpacing: 0.2,
+//         whiteSpace: "nowrap",
+//       }}
+//     >
+//       <span
+//         style={{
+//           width: 6,
+//           height: 6,
+//           borderRadius: 999,
+//           background: style.color,
+//           flex: "0 0 auto",
+//         }}
+//       />
+//       {badge}
+//     </div>
+//   )
+// }
 
 
 export default function EchoClient() {
@@ -205,6 +210,7 @@ export default function EchoClient() {
   const [threadOpen, setThreadOpen] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(true)
+  const [selectedAvatarPost, setSelectedAvatarPost] = useState<EchoPost | null>(null)
 
   const filteredPosts = useMemo(() => sortPosts(posts, filter), [posts, filter])
 
@@ -327,8 +333,16 @@ export default function EchoClient() {
           }}
         >
           {filteredPosts.map((post) => (
-            <EchoPostCard key={post.id} post={post} onOpen={openThread} />
-          ))}
+            <EchoPostCard
+                key={post.id}
+                post={post}
+                onOpenThread={openThread}
+                onOpenAvatar={(post) => {
+                if (!post.avatarUrl) return
+                setSelectedAvatarPost(post)
+                }}
+            />
+            ))}
         </div>
       </div>
 
@@ -367,6 +381,11 @@ export default function EchoClient() {
         post={selectedPost}
         onClose={() => setThreadOpen(false)}
         onReply={handleReply}
+      />
+
+      <EchoAvatarModal
+        post={selectedAvatarPost}
+        onClose={() => setSelectedAvatarPost(null)}
       />
     </div>
   )

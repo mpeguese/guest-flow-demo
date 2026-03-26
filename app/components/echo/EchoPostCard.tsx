@@ -1,9 +1,8 @@
-//app/components/echo/EchoPostCard.tsx
 "use client"
 
 type EchoBadge = "Here Now" | "Attended" | "Booked Table" | "VIP"
 
-type EchoReply = {
+export type EchoReply = {
   id: string
   author: string
   text: string
@@ -20,6 +19,7 @@ export type EchoPost = {
   replyCount: number
   popularity: number
   replies: EchoReply[]
+  avatarUrl?: string
 }
 
 function getInitials(name: string) {
@@ -99,12 +99,12 @@ function DualCommentIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="32"
-      height="32"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="#38BDF8"
-      strokeWidth="1.2"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -115,30 +115,77 @@ function DualCommentIcon() {
   )
 }
 
+function Avatar({
+  author,
+  avatarUrl,
+}: {
+  author: string
+  avatarUrl?: string
+}) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={author}
+        style={{
+          width: 62,
+          height: 62,
+          borderRadius: 30,
+          objectFit: "cover",
+          display: "block",
+          boxShadow: "0 8px 18px rgba(15,23,42,0.12)",
+          border: "1px solid rgba(255,255,255,0.78)",
+          background: "#E5E7EB",
+        }}
+      />
+    )
+  }
+
+  return (
+    <div
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        background:
+          "linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(34,197,94,0.18) 100%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 15,
+        fontWeight: 900,
+        color: "#0F172A",
+        boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+      }}
+    >
+      {getInitials(author)}
+    </div>
+  )
+}
+
 export default function EchoPostCard({
   post,
-  onOpen,
+  onOpenThread,
+  onOpenAvatar,
 }: {
   post: EchoPost
-  onOpen: (post: EchoPost) => void
+  onOpenThread: (post: EchoPost) => void
+  onOpenAvatar: (post: EchoPost) => void
 }) {
   const visibleTags = post.tags.slice(0, 2)
   const hiddenTagCount = Math.max(post.tags.length - visibleTags.length, 0)
 
   return (
-    <button
-      onClick={() => onOpen(post)}
+    <div
       style={{
         width: "100%",
-        textAlign: "left",
-        //border: "none",
-        cursor: "pointer",
         padding: 18,
         borderRadius: 24,
         background: "rgba(255,255,255,0.82)",
         backdropFilter: "blur(14px)",
         boxShadow: "0 14px 30px rgba(15,23,42,0.08)",
         border: "1px solid rgba(255,255,255,0.72)",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -152,128 +199,77 @@ export default function EchoPostCard({
         <div
           style={{
             display: "flex",
+            alignItems: "center",
             gap: 12,
             minWidth: 0,
             flex: 1,
           }}
         >
-          <div
+          <button
+            onClick={() => onOpenAvatar(post)}
             style={{
-              width: 42,
-              height: 42,
-              borderRadius: 14,
-              background:
-                "linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(34,197,94,0.18) 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 13,
-              fontWeight: 900,
-              color: "#0F172A",
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              margin: 0,
+              cursor: post.avatarUrl ? "pointer" : "default",
+              borderRadius: 16,
               flex: "0 0 auto",
             }}
+            aria-label={post.avatarUrl ? `Open ${post.author} profile image` : `${post.author} avatar`}
+            disabled={!post.avatarUrl}
           >
-            {getInitials(post.author)}
-          </div>
+            <Avatar author={post.author} avatarUrl={post.avatarUrl} />
+          </button>
 
-          <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                flexWrap: "wrap",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 900,
-                  color: "#0F172A",
-                }}
-              >
-                {post.author}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "rgba(15,23,42,0.5)",
-                }}
-              >
-                {formatMinutesAgo(post.minutesAgo)}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <EchoBadgePill badge={post.badge} />
-            </div>
-
-            <div
-              style={{
-                marginTop: 12,
                 fontSize: 15,
-                lineHeight: 1.5,
+                fontWeight: 900,
                 color: "#0F172A",
-                fontWeight: 600,
+                lineHeight: 1.15,
               }}
             >
-              {post.text}
+              {post.author}
             </div>
 
             <div
               style={{
-                marginTop: 12,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
+                marginTop: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                color: "rgba(15,23,42,0.5)",
+                lineHeight: 1,
               }}
             >
-              {visibleTags.map((tag) => (
-                <div
-                  key={tag}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    background: "rgba(14,165,233,0.08)",
-                    color: "#0369A1",
-                    fontSize: 12,
-                    fontWeight: 700,
-                  }}
-                >
-                  {tag}
-                </div>
-              ))}
-
-              {hiddenTagCount > 0 ? (
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    background: "rgba(15,23,42,0.06)",
-                    color: "rgba(15,23,42,0.58)",
-                    fontSize: 12,
-                    fontWeight: 700,
-                  }}
-                >
-                  +{hiddenTagCount}
-                </div>
-              ) : null}
+              {formatMinutesAgo(post.minutesAgo)}
             </div>
           </div>
         </div>
 
-        <div
+        <button
+          onClick={() => onOpenThread(post)}
           style={{
-            flex: "0 0 auto",
-            minWidth: 58,
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            margin: 0,
+            cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-end",
             gap: 6,
-            paddingTop: 2,
+            color: "#38BDF8",
+            flex: "0 0 auto",
+            minWidth: 58,
           }}
+          aria-label={`Open thread with ${post.replyCount} replies`}
         >
           <div
             style={{
@@ -287,8 +283,63 @@ export default function EchoPostCard({
           </div>
 
           <DualCommentIcon />
-        </div>
+        </button>
       </div>
-    </button>
+
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 15,
+          lineHeight: 1.55,
+          color: "#0F172A",
+          fontWeight: 600,
+        }}
+      >
+        {post.text}
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        <EchoBadgePill badge={post.badge} />
+
+        {visibleTags.map((tag) => (
+          <div
+            key={tag}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: "rgba(14,165,233,0.08)",
+              color: "#0369A1",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {tag}
+          </div>
+        ))}
+
+        {hiddenTagCount > 0 ? (
+          <div
+            style={{
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.06)",
+              color: "rgba(15,23,42,0.58)",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            +{hiddenTagCount}
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }
