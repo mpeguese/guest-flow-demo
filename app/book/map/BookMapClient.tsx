@@ -7,6 +7,7 @@ import MobileShell from "@/app/components/booking/MobileShell"
 import VenueMap from "@/app/components/booking/VenueMap"
 import ZoneDetailsCard from "@/app/components/booking/ZoneDetailsCard"
 import AreaSelectionModal from "@/app/components/booking/AreaSelectionModal"
+import DatePickerModal from "@/app/components/booking/DatePickerModal"
 import { getZoneStatus, venueZones } from "@/app/lib/booking-data"
 import { passProducts } from "@/app/lib/book-pass-data"
 import { useBookingCart } from "@/app/lib/booking-cart"
@@ -28,6 +29,19 @@ function parsePartySize(value: string | null) {
   if (value === "10+") return 10
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseDateKey(dateKey: string) {
+  if (!dateKey) return null
+  const parsed = new Date(`${dateKey}T12:00:00Z`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function formatDateKey(date: Date) {
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(date.getUTCDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 function formatShortDate(dateKey: string) {
@@ -103,6 +117,55 @@ type FrozenSelection = {
   price: number
   imageSrc?: string
 }
+
+type PromotionTile = {
+  id: string
+  title: string
+  subtitle: string
+  imageSrc: string
+  accentBg: string
+  accentColor: string
+  tag: string
+}
+
+const promotionTiles: PromotionTile[] = [
+  {
+    id: "ladies-free",
+    title: "Ladies Free before 10pm",
+    subtitle: "Complimentary entry for ladies who arrive before 10pm, subject to venue timing and capacity.",
+    imageSrc: "/images/tangra-interior.jpg",
+    accentBg: "#FCE7F3",
+    accentColor: "#BE185D",
+    tag: "Guest List",
+  },
+  {
+    id: "late-night-hh",
+    title: "Late Night Happy Hour until 11",
+    subtitle: "Enjoy discounted cocktails and select pours during the early late-night window.",
+    imageSrc: "/images/table-preview.jpg",
+    accentBg: "#FEF3C7",
+    accentColor: "#B45309",
+    tag: "Drinks",
+  },
+  {
+    id: "brunch-bottomless",
+    title: "Brunch - $30 bottomless mimosas",
+    subtitle: "Weekend brunch special with bottomless mimosas available during the featured seating period.",
+    imageSrc: "/images/checkout-poster.jpg",
+    accentBg: "#DDF7F3",
+    accentColor: "#0F766E",
+    tag: "Brunch",
+  },
+  {
+    id: "green-tea",
+    title: "$7 Green tea shots all night",
+    subtitle: "A featured late-night shot special running throughout the event while inventory lasts.",
+    imageSrc: "/images/tangra-interior.jpg",
+    accentBg: "#E0F2FE",
+    accentColor: "#0369A1",
+    tag: "Special",
+  },
+]
 
 function PassPurchaseModal({
   open,
@@ -186,17 +249,17 @@ function PassPurchaseModal({
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "center",
-          padding: 12,
+          padding: 0,
           pointerEvents: "none",
         }}
       >
         <div
           style={{
             width: "100%",
-            maxWidth: 430,
+            maxWidth: "100%",
             maxHeight: "86vh",
             overflow: "hidden",
-            borderRadius: 30,
+            borderRadius: "30px 30px 0 0",
             background: "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 100%)",
             border: `1px solid ${COLORS.border}`,
             boxShadow: "0 28px 56px rgba(15,23,42,0.18)",
@@ -686,6 +749,464 @@ function PassPurchaseModal({
   )
 }
 
+function PromotionsModal({
+  open,
+  onClose,
+  selectedDate,
+  onSelectDate,
+  onOpenMainCalendar,
+}: {
+  open: boolean
+  onClose: () => void
+  selectedDate: string
+  onSelectDate: (date: string) => void
+  onOpenMainCalendar: () => void
+}) {
+  const promoDates = useMemo(() => buildNextTwoWeeks(selectedDate), [selectedDate])
+
+  const dateStripRef = useRef<HTMLDivElement | null>(null)
+  const dragStateRef = useRef({
+    isDown: false,
+    startX: 0,
+    scrollLeft: 0,
+    moved: false,
+  })
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = dateStripRef.current
+    if (!el) return
+
+    dragStateRef.current.isDown = true
+    dragStateRef.current.startX = e.clientX
+    dragStateRef.current.scrollLeft = el.scrollLeft
+    dragStateRef.current.moved = false
+    el.setPointerCapture?.(e.pointerId)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const el = dateStripRef.current
+    if (!el || !dragStateRef.current.isDown) return
+
+    const dx = e.clientX - dragStateRef.current.startX
+    if (Math.abs(dx) > 4) dragStateRef.current.moved = true
+    el.scrollLeft = dragStateRef.current.scrollLeft - dx
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const el = dateStripRef.current
+    if (!el) return
+    dragStateRef.current.isDown = false
+    el.releasePointerCapture?.(e.pointerId)
+  }
+
+  if (!open) return null
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 120,
+          background: "rgba(15,23,42,0.22)",
+          backdropFilter: "blur(6px)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 121,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          padding: 0,
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "100%",
+            maxHeight: "86vh",
+            overflow: "hidden",
+            borderRadius: "30px 30px 0 0",
+            background: "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 100%)",
+            border: `1px solid ${COLORS.border}`,
+            boxShadow: "0 28px 56px rgba(15,23,42,0.18)",
+            pointerEvents: "auto",
+          }}
+        >
+          <div style={{ paddingTop: 10, display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                width: 46,
+                height: 5,
+                borderRadius: 999,
+                background: "#C9DCE2",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              padding: "14px 16px 18px",
+              overflowY: "auto",
+              maxHeight: "calc(86vh - 20px)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    color: COLORS.textMuted,
+                    marginBottom: 6,
+                  }}
+                >
+                  CURATED OFFERS
+                </div>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: 26,
+                    lineHeight: 1.02,
+                    fontWeight: 900,
+                    letterSpacing: -0.6,
+                    color: COLORS.text,
+                  }}
+                >
+                  Special Promotions
+                </h3>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: 14,
+                    lineHeight: 1.55,
+                    color: COLORS.textSoft,
+                  }}
+                >
+                  Explore featured specials and event-driven offers for your selected date.
+                </p>
+              </div>
+
+              <button
+                onClick={onClose}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 14,
+                  border: `1px solid ${COLORS.border}`,
+                  background: COLORS.card,
+                  color: COLORS.text,
+                  fontSize: 22,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+                aria-label="Close promotions modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    color: COLORS.textMuted,
+                  }}
+                >
+                  CHOOSE DATE
+                </div>
+
+                <button
+                  onClick={onOpenMainCalendar}
+                  aria-label="Open main calendar"
+                  title="Open main calendar"
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 14,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.card,
+                    color: COLORS.primaryHover,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    boxShadow: "0 8px 16px rgba(15,23,42,0.05)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="3" ry="3" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </button>
+              </div>
+
+              <div
+                ref={dateStripRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  overflowX: "auto",
+                  overflowY: "hidden",
+                  paddingBottom: 6,
+                  scrollbarWidth: "none",
+                  WebkitOverflowScrolling: "touch",
+                  cursor: dragStateRef.current.isDown ? "grabbing" : "grab",
+                  userSelect: "none",
+                  touchAction: "pan-x",
+                }}
+              >
+                {promoDates.map((dateKey) => {
+                  const selected = selectedDate === dateKey
+
+                  return (
+                    <button
+                      key={dateKey}
+                      onClick={(e) => {
+                        if (dragStateRef.current.moved) {
+                          e.preventDefault()
+                          return
+                        }
+                        onSelectDate(dateKey)
+                      }}
+                      style={{
+                        minWidth: 78,
+                        height: 74,
+                        borderRadius: 20,
+                        border: selected
+                          ? "1px solid rgba(14,165,233,0.24)"
+                          : `1px solid ${COLORS.border}`,
+                        background: selected ? COLORS.primarySoft : COLORS.card,
+                        color: selected ? COLORS.primaryHover : COLORS.text,
+                        cursor: "pointer",
+                        boxShadow: selected
+                          ? "0 12px 24px rgba(14,165,233,0.14)"
+                          : "0 10px 20px rgba(15,23,42,0.05)",
+                        display: "grid",
+                        alignContent: "center",
+                        gap: 4,
+                        flex: "0 0 auto",
+                        userSelect: "none",
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          letterSpacing: 0.8,
+                          textTransform: "uppercase",
+                          color: selected ? COLORS.primaryHover : COLORS.textMuted,
+                        }}
+                      >
+                        {formatWeekday(dateKey)}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 900,
+                        }}
+                      >
+                        {formatShortDate(dateKey)}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              {promotionTiles.map((promo) => (
+                <div
+                  key={promo.id}
+                  style={{
+                    borderRadius: 24,
+                    background: COLORS.card,
+                    border: `1px solid ${COLORS.border}`,
+                    boxShadow: "0 14px 28px rgba(15,23,42,0.07)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 108px",
+                      gap: 14,
+                      padding: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "7px 10px",
+                          borderRadius: 999,
+                          background: promo.accentBg,
+                          color: promo.accentColor,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          marginBottom: 10,
+                        }}
+                      >
+                        {promo.tag}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 900,
+                          color: COLORS.text,
+                          letterSpacing: -0.4,
+                          lineHeight: 1.18,
+                        }}
+                      >
+                        {promo.title}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 13,
+                          lineHeight: 1.55,
+                          color: COLORS.textMuted,
+                        }}
+                      >
+                        {promo.subtitle}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        width: 108,
+                        height: 108,
+                        borderRadius: 20,
+                        overflow: "hidden",
+                        background: COLORS.bgSoft,
+                        border: `1px solid ${COLORS.border}`,
+                        boxShadow: "0 10px 18px rgba(15,23,42,0.08)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <img
+                        src={promo.imageSrc}
+                        alt={promo.title}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                marginTop: 18,
+                paddingTop: 14,
+                borderTop: `1px solid ${COLORS.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    color: COLORS.textMuted,
+                    marginBottom: 4,
+                  }}
+                >
+                  SELECTED DATE
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    color: COLORS.text,
+                  }}
+                >
+                  {formatDisplayDate(selectedDate)}
+                </div>
+              </div>
+
+              <button
+                onClick={onClose}
+                style={{
+                  minWidth: 136,
+                  height: 50,
+                  borderRadius: 18,
+                  border: "none",
+                  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 12px 22px rgba(14,165,233,0.22)",
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function CalendarIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -718,9 +1239,21 @@ function ProfileIcon() {
 
 function TicketIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 9.5V7.2A2.2 2.2 0 0 1 6.2 5h11.6A2.2 2.2 0 0 1 20 7.2v2.3a2.2 2.2 0 0 0 0 5v2.3a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 16.8v-2.3a2.2 2.2 0 0 0 0-5Z" />
-      <path d="M12 7.5v9" strokeDasharray="2.5 2.5" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="23"
+      height="23"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="5" y="6" width="14" height="12" rx="3" />
+      <path d="M9 10h6" />
+      <path d="M9 13h3.5" />
     </svg>
   )
 }
@@ -767,14 +1300,6 @@ function EchoIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* RIGHT ARCS */}
-      {/* <path
-        d="M18.15 10.15a2.55 2.55 0 0 1 0 3.7"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      /> */}
       <path
         d="M20.45 8.45a4.95 4.95 0 0 1 0 7.1"
         stroke="currentColor"
@@ -789,14 +1314,6 @@ function EchoIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* LEFT ARCS */}
-      {/* <path
-        d="M5.85 13.85a2.55 2.55 0 0 1 0-3.7"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      /> */}
       <path
         d="M3.55 15.55a4.95 4.95 0 0 1 0-7.1"
         stroke="currentColor"
@@ -853,7 +1370,13 @@ export default function BookMapPage() {
 
   const [cartMessage, setCartMessage] = useState("")
   const [passModalOpen, setPassModalOpen] = useState(false)
+  const [promotionsModalOpen, setPromotionsModalOpen] = useState(false)
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [reopenPassModalAfterDatePick, setReopenPassModalAfterDatePick] = useState(false)
+  const [reopenPromotionsModalAfterDatePick, setReopenPromotionsModalAfterDatePick] =
+    useState(false)
   const [passDate, setPassDate] = useState("")
+  const [promotionDate, setPromotionDate] = useState("")
   const [passQuantities, setPassQuantities] = useState<Record<string, number>>({
     "free-rsvp": 0,
     "general-entry": 0,
@@ -864,6 +1387,7 @@ export default function BookMapPage() {
   useEffect(() => {
     const fallbackDate = buildNextTwoWeeks("")[0]
     setPassDate(date || fallbackDate)
+    setPromotionDate(date || fallbackDate)
   }, [date])
 
   const statusByZoneId = useMemo(() => {
@@ -878,8 +1402,8 @@ export default function BookMapPage() {
     !rawPartySize || partySize === null
       ? true
       : selectedZoneId
-      ? filteredZones.some((zone) => zone.id === selectedZoneId)
-      : false
+        ? filteredZones.some((zone) => zone.id === selectedZoneId)
+        : false
 
   const selectedZonePurchasable =
     !!selectedZone &&
@@ -888,14 +1412,15 @@ export default function BookMapPage() {
     selectedZoneMatchesParty
 
   const noZonesForParty = !!rawPartySize && filteredZones.length === 0
-  const interactionLocked = detailsOpen || selectionModalOpen || passModalOpen
+  const interactionLocked =
+    detailsOpen || selectionModalOpen || passModalOpen || promotionsModalOpen
   const mapControlsBottomOffset = passesCardOpen ? 166 : 92
 
   useEffect(() => {
-    if (selectedZoneId && !selectionModalOpen && !passModalOpen) {
+    if (selectedZoneId && !selectionModalOpen && !passModalOpen && !promotionsModalOpen) {
       setDetailsOpen(true)
     }
-  }, [selectedZoneId, selectionModalOpen, passModalOpen])
+  }, [selectedZoneId, selectionModalOpen, passModalOpen, promotionsModalOpen])
 
   useEffect(() => {
     if (!cartMessage) return
@@ -934,9 +1459,45 @@ export default function BookMapPage() {
     setSelectedZoneId(zoneId)
   }
 
+  function updateMapDate(nextDateKey: string) {
+    const params = new URLSearchParams(sp.toString())
+    params.set("date", nextDateKey)
+    router.replace(`/book/map?${params.toString()}`)
+  }
+
+  function handleDateSelected(nextDateValue: Date) {
+    const normalized = new Date(nextDateValue)
+    normalized.setUTCHours(12, 0, 0, 0)
+
+    const nextDateKey = formatDateKey(normalized)
+    setPassDate(nextDateKey)
+    setPromotionDate(nextDateKey)
+    updateMapDate(nextDateKey)
+    setDatePickerOpen(false)
+
+    if (reopenPassModalAfterDatePick) {
+      setPassModalOpen(true)
+      setReopenPassModalAfterDatePick(false)
+    }
+
+    if (reopenPromotionsModalAfterDatePick) {
+      setPromotionsModalOpen(true)
+      setReopenPromotionsModalAfterDatePick(false)
+    }
+  }
+
   function handleOpenMainCalendarFromPasses() {
     setPassModalOpen(false)
-    router.push("/book")
+    setReopenPassModalAfterDatePick(true)
+    setReopenPromotionsModalAfterDatePick(false)
+    setDatePickerOpen(true)
+  }
+
+  function handleOpenMainCalendarFromPromotions() {
+    setPromotionsModalOpen(false)
+    setReopenPromotionsModalAfterDatePick(true)
+    setReopenPassModalAfterDatePick(false)
+    setDatePickerOpen(true)
   }
 
   function openSelectionModal() {
@@ -1156,7 +1717,11 @@ export default function BookMapPage() {
           >
             {mounted ? (
               <button
-                onClick={() => router.push("/book")}
+                onClick={() => {
+                  setReopenPassModalAfterDatePick(false)
+                  setReopenPromotionsModalAfterDatePick(false)
+                  setDatePickerOpen(true)
+                }}
                 style={{
                   height: "100%",
                   minWidth: 0,
@@ -1448,6 +2013,26 @@ export default function BookMapPage() {
           onAddPassesToCart={handleAddPassesToCart}
         />
 
+        <PromotionsModal
+          open={promotionsModalOpen}
+          onClose={() => setPromotionsModalOpen(false)}
+          selectedDate={promotionDate || buildNextTwoWeeks("")[0]}
+          onSelectDate={setPromotionDate}
+          onOpenMainCalendar={handleOpenMainCalendarFromPromotions}
+        />
+
+        {datePickerOpen ? (
+          <DatePickerModal
+            selectedDate={parseDateKey(date)}
+            onSelectDate={handleDateSelected}
+            onClose={() => {
+              setDatePickerOpen(false)
+              setReopenPassModalAfterDatePick(false)
+              setReopenPromotionsModalAfterDatePick(false)
+            }}
+          />
+        ) : null}
+
         <div
           style={{
             position: "fixed",
@@ -1486,6 +2071,7 @@ export default function BookMapPage() {
               <button
                 onClick={() => {
                   setPassesCardOpen(true)
+                  setPromotionsModalOpen(false)
                   setPassModalOpen(true)
                 }}
                 aria-label="Open passes"
@@ -1502,18 +2088,17 @@ export default function BookMapPage() {
               >
                 <TicketIcon />
                 <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
-                  Ticket
+                  Tickets
                 </div>
               </button>
 
-               {/* ADDITIONAL BUTTON LOGIC */}
               <button
-                onClick={() => setCartMessage("Promotions coming soon!")}
-                // onClick={() => {
-                //   setPassesCardOpen(true)
-                //   setPassModalOpen(true)
-                // }}
-                aria-label="Open passes"
+                onClick={() => {
+                  setPassesCardOpen(true)
+                  setPassModalOpen(false)
+                  setPromotionsModalOpen(true)
+                }}
+                aria-label="Open promotions"
                 style={{
                   border: "none",
                   background: "transparent",
@@ -1533,10 +2118,6 @@ export default function BookMapPage() {
 
               <button
                 onClick={() => router.push("/echo")}
-                // onClick={() => {
-                //   setPassesCardOpen(true)
-                //   setPassModalOpen(true)
-                // }}
                 aria-label="Open pulse"
                 style={{
                   border: "none",
@@ -1597,8 +2178,6 @@ export default function BookMapPage() {
                   Cart
                 </div>
               </button>
-
-               
             </div>
           </div>
         </div>

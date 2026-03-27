@@ -14,16 +14,20 @@ type CheckoutItem = {
   session: string
 }
 
+type CheckoutRequestBody = {
+  promoCode?: string
+  items?: CheckoutItem[]
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const items = Array.isArray(body?.items) ? (body.items as CheckoutItem[]) : []
+    const body = (await req.json()) as CheckoutRequestBody
+    const items = Array.isArray(body?.items) ? body.items : []
+    const promoCode =
+      typeof body?.promoCode === "string" ? body.promoCode.trim() : ""
 
     if (items.length === 0) {
-      return NextResponse.json(
-        { error: "Your cart is empty." },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Your cart is empty." }, { status: 400 })
     }
 
     let subtotal = 0
@@ -37,8 +41,7 @@ export async function POST(req: NextRequest) {
       }
 
       const inferredType =
-        item.itemType ||
-        (item.session === "entry" ? "pass" : "zone")
+        item.itemType || (item.session === "entry" ? "pass" : "zone")
 
       if (inferredType === "pass") {
         const passId =
@@ -71,7 +74,7 @@ export async function POST(req: NextRequest) {
       subtotal += zone.price
     }
 
-    const pricing = calculateBookingPricing(subtotal)
+    const pricing = calculateBookingPricing(subtotal, promoCode)
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(pricing.total * 100),
@@ -81,11 +84,22 @@ export async function POST(req: NextRequest) {
       },
       metadata: {
         itemCount: String(items.length),
-        itemTypes: items.map((item) => item.itemType || (item.session === "entry" ? "pass" : "zone")).join(",").slice(0, 500),
+        itemTypes: items
+          .map((item) => item.itemType || (item.session === "entry" ? "pass" : "zone"))
+          .join(",")
+          .slice(0, 500),
         productIds: items
           .map((item) => item.productId || item.zoneId)
           .join(",")
           .slice(0, 500),
+        promoCode: pricing.appliedPromo?.code || "",
+        promoDescription: pricing.appliedPromo?.description || "",
+        subtotal: pricing.subtotal.toFixed(2),
+        discount: pricing.discount.toFixed(2),
+        discountedSubtotal: pricing.discountedSubtotal.toFixed(2),
+        tax: pricing.tax.toFixed(2),
+        processingFee: pricing.processingFee.toFixed(2),
+        total: pricing.total.toFixed(2),
       },
     })
 

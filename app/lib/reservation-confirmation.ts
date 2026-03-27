@@ -29,9 +29,13 @@ export type ReservationRecord = {
   reservationCode: string
   createdAt: string
   subtotal: number
+  discount?: number
+  discountedSubtotal?: number
   tax: number
   processingFee: number
   total: number
+  promoCode?: string
+  promoDescription?: string
   items: ReservationLineItem[]
   guestInfo?: ReservationGuestInfo
 }
@@ -55,6 +59,17 @@ export function inferReservationItemType(
   return "zone"
 }
 
+export function buildItemQrCode(itemId: string, itemType: ReservationItemType) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  let suffix = ""
+  for (let i = 0; i < 6; i += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+
+  const prefix = itemType === "pass" ? "GF-PASS" : "GF-RES"
+  return `${prefix}-${suffix}-${itemId.slice(-4).toUpperCase()}`
+}
+
 export function normalizeReservationItem(item: ReservationLineItem): ReservationLineItem {
   const itemType = inferReservationItemType(item)
   const productId =
@@ -67,6 +82,7 @@ export function normalizeReservationItem(item: ReservationLineItem): Reservation
     ...item,
     itemType,
     productId,
+    partySize: String(item.partySize ?? ""),
     qrCode: item.qrCode || buildItemQrCode(item.id, itemType),
   }
 }
@@ -74,23 +90,27 @@ export function normalizeReservationItem(item: ReservationLineItem): Reservation
 export function normalizeReservationRecord(
   reservation: ReservationRecord
 ): ReservationRecord {
+  const subtotal = Number(reservation.subtotal) || 0
+  const discount = Number(reservation.discount) || 0
+  const discountedSubtotal =
+    reservation.discountedSubtotal != null
+      ? Number(reservation.discountedSubtotal) || 0
+      : Math.max(0, subtotal - discount)
+
   return {
     ...reservation,
+    subtotal,
+    discount,
+    discountedSubtotal,
+    tax: Number(reservation.tax) || 0,
+    processingFee: Number(reservation.processingFee) || 0,
+    total: Number(reservation.total) || 0,
+    promoCode: reservation.promoCode || "",
+    promoDescription: reservation.promoDescription || "",
     items: Array.isArray(reservation.items)
       ? reservation.items.map((item) => normalizeReservationItem(item))
       : [],
   }
-}
-
-export function buildItemQrCode(itemId: string, itemType: ReservationItemType) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  let suffix = ""
-  for (let i = 0; i < 6; i += 1) {
-    suffix += alphabet[Math.floor(Math.random() * alphabet.length)]
-  }
-
-  const prefix = itemType === "pass" ? "GF-PASS" : "GF-RES"
-  return `${prefix}-${suffix}-${itemId.slice(-4).toUpperCase()}`
 }
 
 export function saveLatestReservation(reservation: ReservationRecord) {

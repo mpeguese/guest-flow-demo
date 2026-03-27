@@ -99,12 +99,12 @@ function DualCommentIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
+      width="30"
+      height="30"
       viewBox="0 0 24 24"
       fill="none"
       stroke="#38BDF8"
-      strokeWidth="1.7"
+      strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

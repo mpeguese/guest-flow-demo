@@ -24,8 +24,8 @@ export type BookingCartItem = {
   imageSrc?: string
 }
 
-const STORAGE_KEY = "vv-booking-cart-v1"
-const CART_EVENT = "vv-booking-cart-updated"
+const STORAGE_KEY = "gf-booking-cart-v1"
+const CART_EVENT = "gf-booking-cart-updated"
 
 function isBrowser() {
   return typeof window !== "undefined"

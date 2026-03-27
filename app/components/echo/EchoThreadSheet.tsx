@@ -310,82 +310,89 @@ export default function EchoThreadSheet({
         </div>
 
         <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: "12px 16px calc(14px + env(safe-area-inset-bottom))",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.95) 18%, rgba(255,255,255,0.98) 100%)",
-            backdropFilter: "blur(14px)",
-            borderTop: "1px solid rgba(148,163,184,0.14)",
-          }}
-        >
-          <div
             style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "flex-end",
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                padding: "12px 16px calc(14px + env(safe-area-inset-bottom))",
+                background:
+                "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.95) 18%, rgba(255,255,255,0.98) 100%)",
+                backdropFilter: "blur(14px)",
+                borderTop: "1px solid rgba(148,163,184,0.14)",
             }}
-          >
-            <div style={{ flex: 1 }}>
-              <textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value.slice(0, replyLimit))}
-                rows={2}
-                placeholder="Reply"
-                style={{
-                  width: "100%",
-                  resize: "none",
-                  border: "1px solid rgba(148,163,184,0.18)",
-                  outline: "none",
-                  borderRadius: 18,
-                  padding: 14,
-                  fontSize: 14,
-                  lineHeight: 1.35,
-                  color: "#0F172A",
-                  background: "rgba(255,255,255,0.95)",
-                  boxSizing: "border-box",
-                }}
-              />
-              <div
-                style={{
-                  marginTop: 6,
-                  textAlign: "right",
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: remaining < 16 ? "#DC2626" : "rgba(15,23,42,0.46)",
-                }}
-              >
-                {remaining}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                if (!canReply) return
-                onReply(post.id, replyText.trim())
-                setReplyText("")
-              }}
-              style={{
-                border: "none",
-                cursor: canReply ? "pointer" : "not-allowed",
-                borderRadius: 18,
-                padding: "14px 16px",
-                background: canReply
-                  ? "linear-gradient(135deg, #0EA5E9 0%, #22C55E 100%)"
-                  : "rgba(148,163,184,0.35)",
-                color: "#FFFFFF",
-                fontSize: 13,
-                fontWeight: 900,
-                minWidth: 78,
-              }}
             >
-              Reply
-            </button>
-          </div>
-        </div>
+            <div
+                style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                }}
+            >
+                <div style={{ width: "100%" }}>
+                <textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value.slice(0, replyLimit))}
+                    rows={2}
+                    placeholder="Reply"
+                    style={{
+                    width: "100%",
+                    resize: "none",
+                    border: "1px solid rgba(148,163,184,0.18)",
+                    outline: "none",
+                    borderRadius: 18,
+                    padding: 14,
+                    fontSize: 14,
+                    lineHeight: 1.35,
+                    color: "#0F172A",
+                    background: "rgba(255,255,255,0.95)",
+                    boxSizing: "border-box",
+                    }}
+                />
+                <div
+                    style={{
+                    marginTop: 6,
+                    textAlign: "right",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: remaining < 16 ? "#DC2626" : "rgba(15,23,42,0.46)",
+                    }}
+                >
+                    {remaining}
+                </div>
+                </div>
+
+                <div
+                style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                }}
+                >
+                <button
+                    onClick={() => {
+                    if (!canReply) return
+                    onReply(post.id, replyText.trim())
+                    setReplyText("")
+                    }}
+                    style={{
+                    border: "none",
+                    cursor: canReply ? "pointer" : "not-allowed",
+                    borderRadius: 18,
+                    padding: "14px 16px",
+                    background: canReply
+                        ? "linear-gradient(135deg, #0EA5E9 0%, #22C55E 100%)"
+                        : "rgba(148,163,184,0.35)",
+                    color: "#FFFFFF",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    minWidth: 78,
+                    }}
+                >
+                    Reply
+                </button>
+                </div>
+            </div>
+            </div>
       </div>
     </>
   )

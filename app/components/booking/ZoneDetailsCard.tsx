@@ -132,8 +132,8 @@ export default function ZoneDetailsCard({
         <div
           style={{
             width: "100%",
-            maxWidth: 430,
-            borderRadius: 30,
+            maxWidth: "100%",
+            borderRadius: "30px 30px 0 0",
             background: "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 100%)",
             border: `1px solid ${COLORS.border}`,
             color: COLORS.text,

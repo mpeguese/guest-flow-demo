@@ -1,11 +1,18 @@
 // app/book/cart/page.tsx
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import MobileShell from "@/app/components/booking/MobileShell"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
+import {
+  clearStoredPromoCode,
+  findPromoByCode,
+  getStoredPromoCode,
+  normalizePromoCode,
+  setStoredPromoCode,
+} from "@/app/lib/booking-promos"
 
 function formatDate(dateKey: string) {
   if (!dateKey) return "Not selected"
@@ -114,7 +121,24 @@ export default function CartPage() {
   const router = useRouter()
   const { items, removeItem, cartCount, subtotal } = useBookingCart()
 
-  const pricing = useMemo(() => calculateBookingPricing(subtotal), [subtotal])
+  const [promoCode, setPromoCode] = useState("")
+  const [promoInput, setPromoInput] = useState("")
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [promoError, setPromoError] = useState("")
+
+  useEffect(() => {
+    const storedCode = getStoredPromoCode()
+    if (storedCode) {
+      setPromoCode(storedCode)
+      setPromoInput(storedCode)
+      setPromoOpen(true)
+    }
+  }, [])
+
+  const pricing = useMemo(
+    () => calculateBookingPricing(subtotal, promoCode),
+    [subtotal, promoCode]
+  )
 
   const zoneCount = useMemo(
     () => items.filter((item) => inferItemType(item) === "zone").length,
@@ -125,6 +149,32 @@ export default function CartPage() {
     () => items.filter((item) => inferItemType(item) === "pass").length,
     [items]
   )
+
+  function handleApplyPromo() {
+    const normalized = normalizePromoCode(promoInput)
+    if (!normalized) {
+      setPromoError("Enter a promo code.")
+      return
+    }
+
+    const matchedPromo = findPromoByCode(normalized)
+    if (!matchedPromo) {
+      setPromoError("That promo code is not valid!")
+      return
+    }
+
+    setPromoError("")
+    setPromoCode(normalized)
+    setPromoInput(normalized)
+    setStoredPromoCode(normalized)
+  }
+
+  function handleRemovePromo() {
+    setPromoCode("")
+    setPromoInput("")
+    setPromoError("")
+    clearStoredPromoCode()
+  }
 
   return (
     <MobileShell>
@@ -212,9 +262,6 @@ export default function CartPage() {
                   width: 136,
                   height: 136,
                   borderRadius: 32,
-                  //background: "rgba(255,255,255,0.72)",
-                  //border: `1px solid ${COLORS.border}`,
-                  //boxShadow: "0 18px 36px rgba(15,23,42,0.08)",
                   display: "grid",
                   placeItems: "center",
                   color: COLORS.text,
@@ -376,24 +423,24 @@ export default function CartPage() {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "92px 1fr",
+                          gridTemplateColumns: "92px 1fr auto",
                           gap: 14,
-                          alignItems: "start",
+                          alignItems: "center",
                         }}
                       >
                         <div
                           style={{
                             width: 92,
                             height: 92,
-                            borderRadius: 18,
+                            borderRadius: 20,
                             overflow: "hidden",
                             background: COLORS.bgSoft,
-                            border: `1px solid ${COLORS.border}`,
+                            border: `1px solid ${COLORS.borderSoft}`,
                           }}
                         >
                           <img
-                            src={item.imageSrc || "/images/table-preview.jpg"}
-                            alt={`${item.zoneName} preview`}
+                            src={item.imageSrc}
+                            alt={item.zoneName}
                             style={{
                               width: "100%",
                               height: "100%",
@@ -403,138 +450,85 @@ export default function CartPage() {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <div
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 12,
-                              alignItems: "flex-start",
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: 8,
-                                  alignItems: "center",
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    padding: "7px 10px",
-                                    borderRadius: 999,
-                                    background: badge.background,
-                                    border: `1px solid ${badge.border}`,
-                                    color: badge.color,
-                                    fontSize: 12,
-                                    fontWeight: 800,
-                                    lineHeight: 1,
-                                  }}
-                                >
-                                  {badge.label}
-                                </span>
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: 21,
-                                  fontWeight: 900,
-                                  color: COLORS.text,
-                                  letterSpacing: -0.4,
-                                }}
-                              >
-                                {item.zoneName}
-                              </div>
-
-                              <div
-                                style={{
-                                  marginTop: 6,
-                                  fontSize: 14,
-                                  color: COLORS.textMuted,
-                                  lineHeight: 1.55,
-                                }}
-                              >
-                                {item.section} · {formatDate(item.date)} ·{" "}
-                                {isPass
-                                  ? "1 guest"
-                                  : `${item.partySize} guest${item.partySize === "1" ? "" : "s"}`}{" "}
-                                · {item.session}
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => removeItem(item.id)}
-                              aria-label={`Remove ${item.zoneName} from cart`}
-                              title="Remove from cart"
-                              style={{
-                                width: 40,
-                                height: 40,
-                                border: `1px solid ${COLORS.dangerSoft}`,
-                                background: "#FFF5F5",
-                                color: COLORS.danger,
-                                borderRadius: 12,
-                                display: "grid",
-                                placeItems: "center",
-                                cursor: "pointer",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M3 6h18" />
-                                <path d="M8 6V4h8v2" />
-                                <path d="M19 6l-1 14H6L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: 12,
-                              display: "flex",
-                              justifyContent: "space-between",
+                              display: "inline-flex",
                               alignItems: "center",
-                              gap: 12,
+                              gap: 6,
+                              padding: "7px 10px",
+                              borderRadius: 999,
+                              background: badge.background,
+                              color: badge.color,
+                              border: `1px solid ${badge.border}`,
+                              fontSize: 12,
+                              fontWeight: 800,
+                              marginBottom: 10,
                             }}
                           >
-                            <div
-                              style={{
-                                fontSize: 16,
-                                fontWeight: 800,
-                                color: COLORS.text,
-                              }}
-                            >
-                              {money(item.price)}
-                            </div>
-
-                            {isPass ? (
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 800,
-                                  color: COLORS.textMuted,
-                                  letterSpacing: 0.6,
-                                  textTransform: "uppercase",
-                                }}
-                              >
-                                Individual QR issued after purchase
-                              </div>
-                            ) : null}
+                            {badge.label}
                           </div>
+
+                          <div
+                            style={{
+                              fontSize: 18,
+                              fontWeight: 900,
+                              color: COLORS.text,
+                              letterSpacing: -0.35,
+                              lineHeight: 1.15,
+                            }}
+                          >
+                            {item.zoneName}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 6,
+                              color: COLORS.textSoft,
+                              fontSize: 14,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {item.section}
+                            {isPass ? "" : ` • ${item.partySize} guests`}
+                            <br />
+                            {formatDate(item.date)} • {item.session}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 10,
+                            justifyItems: "end",
+                            alignSelf: "stretch",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 18,
+                              fontWeight: 900,
+                              color: COLORS.text,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {money(item.price)}
+                          </div>
+
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: COLORS.danger,
+                              fontSize: 13,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            Remove
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -544,8 +538,8 @@ export default function CartPage() {
 
               <div
                 style={{
-                  marginTop: 18,
-                  padding: 20,
+                  marginTop: 16,
+                  padding: 18,
                   borderRadius: 24,
                   background: COLORS.card,
                   border: `1px solid ${COLORS.border}`,
@@ -554,10 +548,23 @@ export default function CartPage() {
               >
                 <div
                   style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    color: COLORS.textMuted,
+                    textTransform: "uppercase",
+                    marginBottom: 12,
+                  }}
+                >
+                  Pricing summary
+                </div>
+
+                <div
+                  style={{
                     display: "grid",
                     gap: 10,
-                    color: COLORS.textSoft,
                     fontSize: 14,
+                    color: COLORS.textSoft,
                     fontWeight: 600,
                   }}
                 >
@@ -565,29 +572,214 @@ export default function CartPage() {
                     <span>Subtotal</span>
                     <span>{money(pricing.subtotal)}</span>
                   </div>
+
+                  {pricing.discount > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        color: "#0F766E",
+                      }}
+                    >
+                      <span>
+                        Promo Discount
+                        {pricing.appliedPromo ? ` (${pricing.appliedPromo.code})` : ""}
+                      </span>
+                      <span>-{money(pricing.discount)}</span>
+                    </div>
+                  ) : null}
+
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Tax (7%)</span>
                     <span>{money(pricing.tax)}</span>
                   </div>
+
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Processing Fee (5%)</span>
                     <span>{money(pricing.processingFee)}</span>
                   </div>
-                  <div
+                </div>
+
+                {!promoOpen ? (
+                  <button
+                    onClick={() => setPromoOpen(true)}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      paddingTop: 12,
-                      marginTop: 4,
-                      borderTop: `1px solid ${COLORS.border}`,
-                      fontSize: 16,
-                      fontWeight: 900,
-                      color: COLORS.text,
+                      marginTop: 14,
+                      border: "none",
+                      background: "transparent",
+                      color: COLORS.primaryHover,
+                      padding: 0,
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      textAlign: "left",
                     }}
                   >
-                    <span>Grand Total</span>
-                    <span>{money(pricing.total)}</span>
+                    Have a promo code?
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      padding: 14,
+                      borderRadius: 18,
+                      background: COLORS.bgSoft,
+                      border: `1px solid ${COLORS.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: COLORS.text,
+                        marginBottom: 10,
+                      }}
+                    >
+                      Promo or promoter code
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto",
+                        gap: 10,
+                      }}
+                    >
+                      <input
+                        value={promoInput}
+                        onChange={(e) => {
+                          setPromoInput(e.target.value)
+                          if (promoError) setPromoError("")
+                        }}
+                        placeholder="Enter code"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        style={{
+                          height: 48,
+                          borderRadius: 14,
+                          border: `1px solid ${promoError ? "#FCA5A5" : COLORS.border}`,
+                          background: "#FFFFFF",
+                          padding: "0 14px",
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: COLORS.text,
+                          outline: "none",
+                        }}
+                      />
+
+                      <button
+                        onClick={handleApplyPromo}
+                        style={{
+                          height: 48,
+                          padding: "0 16px",
+                          border: "none",
+                          borderRadius: 14,
+                          background: COLORS.text,
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+
+                    {promoError ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          color: "#B91C1C",
+                          fontSize: 13,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {promoError}
+                      </div>
+                    ) : null}
+
+                    {pricing.appliedPromo ? (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          padding: "12px 14px",
+                          borderRadius: 14,
+                          background: "#ECFDF5",
+                          border: "1px solid #A7F3D0",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 900,
+                              color: "#065F46",
+                            }}
+                          >
+                            {pricing.appliedPromo.code} applied
+                          </div>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#047857",
+                            }}
+                          >
+                            {pricing.appliedPromo.description}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleRemovePromo}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "#065F46",
+                            fontSize: 13,
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          color: COLORS.textMuted,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Demo codes: SAVE10, WELCOME15, NOFEE, PROMOTERJAY
+                      </div>
+                    )}
                   </div>
+                )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    paddingTop: 12,
+                    marginTop: 14,
+                    borderTop: `1px solid ${COLORS.border}`,
+                    fontSize: 16,
+                    fontWeight: 900,
+                    color: COLORS.text,
+                  }}
+                >
+                  <span>Grand Total</span>
+                  <span>{money(pricing.total)}</span>
                 </div>
 
                 <div
@@ -602,7 +794,7 @@ export default function CartPage() {
                     lineHeight: 1.55,
                   }}
                 >
-                  Locations and passes can be purchased together. Table and hotspot bookings will use the main reservation QR, while passes receive individual swipeable QR codes after payment.
+                  Locations and passes can be purchased together. V.I.P. & Table bookings will use the main reservation QR, Passes receive individual swipeable QR codes after payment.
                 </div>
 
                 <div

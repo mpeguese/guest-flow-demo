@@ -7,6 +7,7 @@ import MobileShell from "@/app/components/booking/MobileShell"
 import StripeCheckoutForm from "@/app/components/booking/StripeCheckoutForm"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
+import { getStoredPromoCode } from "@/app/lib/booking-promos"
 import {
   generateReservationCode,
   saveLatestReservation,
@@ -35,7 +36,16 @@ export default function DetailsPage() {
   const router = useRouter()
   const { items, cartCount, subtotal } = useBookingCart()
 
-  const pricing = useMemo(() => calculateBookingPricing(subtotal), [subtotal])
+  const [promoCode, setPromoCode] = useState("")
+
+  useEffect(() => {
+    setPromoCode(getStoredPromoCode())
+  }, [])
+
+  const pricing = useMemo(
+    () => calculateBookingPricing(subtotal, promoCode),
+    [subtotal, promoCode]
+  )
 
   const reservationCode = useMemo(() => generateReservationCode(), [])
 
@@ -58,6 +68,15 @@ export default function DetailsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          promoCode,
+          pricing: {
+            subtotal: pricing.subtotal,
+            discount: pricing.discount,
+            discountedSubtotal: pricing.discountedSubtotal,
+            tax: pricing.tax,
+            processingFee: pricing.processingFee,
+            total: pricing.total,
+          },
           items: items.map((item) => ({
             itemType: item.itemType,
             productId: item.productId,
@@ -89,9 +108,13 @@ export default function DetailsPage() {
         reservationCode,
         createdAt: new Date().toISOString(),
         subtotal: pricing.subtotal,
+        discount: pricing.discount,
+        discountedSubtotal: pricing.discountedSubtotal,
         tax: pricing.tax,
         processingFee: pricing.processingFee,
         total: pricing.total,
+        promoCode: pricing.appliedPromo?.code || "",
+        promoDescription: pricing.appliedPromo?.description || "",
         items: items.map((item) => ({
           id: item.id,
           itemType: item.itemType || "zone",
@@ -100,7 +123,7 @@ export default function DetailsPage() {
           zoneName: item.zoneName,
           section: item.section,
           date: item.date,
-          partySize: item.partySize,
+          partySize: String(item.partySize ?? ""),
           session: item.session,
           price: item.price,
           imageSrc: item.imageSrc,
@@ -121,7 +144,7 @@ export default function DetailsPage() {
     if (cartCount === 0) return
     initializeCheckout()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartCount])
+  }, [cartCount, promoCode])
 
   if (cartCount === 0) {
     return (
@@ -283,76 +306,87 @@ export default function DetailsPage() {
             </div>
 
             <div style={{ display: "grid", gap: 14 }}>
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "76px 1fr auto",
-                    gap: 12,
-                    alignItems: "center",
-                    paddingBottom: 14,
-                    borderBottom: "1px solid #E2E8F0",
-                  }}
-                >
+              {items.map((item) => {
+                const guestCount = Number(item.partySize ?? 0)
+                const isPass = (item.itemType || "zone") === "pass"
+
+                return (
                   <div
+                    key={item.id}
                     style={{
-                      width: 76,
-                      height: 76,
-                      borderRadius: 16,
-                      overflow: "hidden",
-                      background: "#F8FAFC",
-                      border: "1px solid #E2E8F0",
+                      display: "grid",
+                      gridTemplateColumns: "76px 1fr auto",
+                      gap: 12,
+                      alignItems: "center",
+                      paddingBottom: 14,
+                      borderBottom: "1px solid #E2E8F0",
                     }}
                   >
-                    <img
-                      src={item.imageSrc || "/images/table-preview.jpg"}
-                      alt={`${item.zoneName} preview`}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                    />
-                  </div>
-
-                  <div>
                     <div
                       style={{
-                        fontSize: 17,
-                        fontWeight: 900,
+                        width: 76,
+                        height: 76,
+                        borderRadius: 16,
+                        overflow: "hidden",
+                        background: "#F8FAFC",
+                        border: "1px solid #E2E8F0",
+                      }}
+                    >
+                      <img
+                        src={item.imageSrc}
+                        alt={item.zoneName}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 900,
+                          color: "#0F172A",
+                          letterSpacing: -0.35,
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {item.zoneName}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 6,
+                          color: "#475569",
+                          fontSize: 14,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        {item.section}
+                        {isPass
+                          ? ""
+                          : ` • ${item.partySize} guest${guestCount === 1 ? "" : "s"}`}
+                        <br />
+                        {formatDate(item.date)} · {item.session}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
                         color: "#0F172A",
-                        letterSpacing: -0.3,
+                        whiteSpace: "nowrap",
                       }}
                     >
-                      {item.zoneName}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 14,
-                        lineHeight: 1.5,
-                        color: "#64748B",
-                      }}
-                    >
-                      {item.section} · {formatDate(item.date)} · {item.partySize} guest
-                      {item.partySize === "1" ? "" : "s"} · {item.session}
+                      {money(item.price)}
                     </div>
                   </div>
-
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 800,
-                      color: "#0F172A",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {money(item.price)}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div style={{ paddingTop: 14, display: "grid", gap: 10 }}>
@@ -368,6 +402,40 @@ export default function DetailsPage() {
                 <span>Subtotal</span>
                 <span>{money(pricing.subtotal)}</span>
               </div>
+
+              {pricing.discount > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "#0F766E",
+                  }}
+                >
+                  <span>
+                    Promo Discount
+                    {pricing.appliedPromo ? ` (${pricing.appliedPromo.code})` : ""}
+                  </span>
+                  <span>-{money(pricing.discount)}</span>
+                </div>
+              ) : null}
+
+              {pricing.appliedPromo?.description && pricing.discount === 0 ? (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 14,
+                    background: "#ECFDF5",
+                    border: "1px solid #A7F3D0",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#047857",
+                  }}
+                >
+                  {pricing.appliedPromo.code} — {pricing.appliedPromo.description}
+                </div>
+              ) : null}
 
               <div
                 style={{
