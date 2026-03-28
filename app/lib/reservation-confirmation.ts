@@ -67,7 +67,9 @@ export function buildItemQrCode(itemId: string, itemType: ReservationItemType) {
   }
 
   const prefix = itemType === "pass" ? "GF-PASS" : "GF-RES"
-  return `${prefix}-${suffix}-${itemId.slice(-4).toUpperCase()}`
+  //return `${prefix}-${suffix}-${itemId.slice(-4).toUpperCase()}`
+  const safeTail = itemId.replace(/[^A-Za-z0-9]/g, "").slice(-4).toUpperCase() || "0000"
+  return `${prefix}-${suffix}-${safeTail}`
 }
 
 export function normalizeReservationItem(item: ReservationLineItem): ReservationLineItem {
