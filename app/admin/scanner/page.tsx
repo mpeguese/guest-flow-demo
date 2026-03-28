@@ -261,6 +261,7 @@ export default function AdminScannerPage() {
   const [isValidating, setIsValidating] = useState(false)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [bannerMessage, setBannerMessage] = useState("")
+  const [recentScansOpen, setRecentScansOpen] = useState(false)
   const [recentScans, setRecentScans] = useState<RecentScan[]>([
     {
       id: "seed-1",
@@ -362,8 +363,7 @@ export default function AdminScannerPage() {
           throw new Error(data?.error || "Validation failed")
         }
 
-        const nextStatus = data.result
-          .status as ValidationResult["status"]
+        const nextStatus = data.result.status as ValidationResult["status"]
 
         setScanStatus(nextStatus)
         setResult(data.result)
@@ -535,7 +535,7 @@ export default function AdminScannerPage() {
         background:
           "linear-gradient(180deg, #F8FCFF 0%, #EEF8FF 46%, #FFF5E8 100%)",
         color: "#0F172A",
-        padding: 16,
+        padding: "12px 12px 96px",
       }}
     >
       <div
@@ -553,7 +553,7 @@ export default function AdminScannerPage() {
             background: "rgba(255,255,255,0.84)",
             backdropFilter: "blur(16px)",
             boxShadow: "0 18px 48px rgba(15,23,42,0.06)",
-            padding: 20,
+            padding: 16,
           }}
         >
           <div
@@ -581,10 +581,10 @@ export default function AdminScannerPage() {
               <div
                 style={{
                   marginTop: 8,
-                  fontSize: 32,
+                  fontSize: 24,
                   lineHeight: 1,
                   fontWeight: 900,
-                  letterSpacing: -1.1,
+                  letterSpacing: -0.9,
                   color: "#020617",
                 }}
               >
@@ -593,62 +593,14 @@ export default function AdminScannerPage() {
 
               <div
                 style={{
-                  marginTop: 10,
-                  fontSize: 14,
+                  marginTop: 6,
+                  fontSize: 13,
                   lineHeight: 1.6,
                   color: "#64748B",
                 }}
               >
-                LIV Tampa • Neon Saturdays • Main Door
+                Neon Saturdays • Main Door
               </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <Link
-                href="/admin/dashboard"
-                style={{
-                  height: 44,
-                  padding: "0 16px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(148,163,184,0.20)",
-                  background: "#FFFFFF",
-                  color: "#0F172A",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                Back to Dashboard
-              </Link>
-
-              <button
-                onClick={() => void startScanner()}
-                disabled={cameraLoading}
-                style={{
-                  height: 44,
-                  padding: "0 16px",
-                  borderRadius: 999,
-                  border: "none",
-                  background: "#0F172A",
-                  color: "#FFFFFF",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: cameraLoading ? "default" : "pointer",
-                  boxShadow: "0 14px 30px rgba(15,23,42,0.14)",
-                  opacity: cameraLoading ? 0.7 : 1,
-                }}
-              >
-                {cameraLoading ? "Starting Camera..." : "Open Camera"}
-              </button>
             </div>
           </div>
         </section>
@@ -680,7 +632,7 @@ export default function AdminScannerPage() {
               <div
                 style={{
                   borderRadius: 28,
-                  minHeight: 420,
+                  minHeight: 320,
                   background:
                     "linear-gradient(145deg, rgba(8,47,73,0.98) 0%, rgba(15,118,110,0.96) 52%, rgba(245,158,11,0.92) 100%)",
                   position: "relative",
@@ -715,8 +667,8 @@ export default function AdminScannerPage() {
                       width: "100%",
                       maxWidth: 520,
                       margin: "0 auto",
-                      minHeight: 320,
-                      borderRadius: 32,
+                      minHeight: 240,
+                      borderRadius: 24,
                       overflow: "hidden",
                       border: "2px solid rgba(255,255,255,0.28)",
                       background: "rgba(255,255,255,0.08)",
@@ -756,18 +708,6 @@ export default function AdminScannerPage() {
                       >
                         Ready to Scan
                       </div>
-
-                      <div
-                        style={{
-                          marginTop: 14,
-                          fontSize: 14,
-                          lineHeight: 1.7,
-                          color: "rgba(255,255,255,0.84)",
-                        }}
-                      >
-                        Tap Open Camera and allow camera access to start live QR
-                        validation.
-                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -785,7 +725,7 @@ export default function AdminScannerPage() {
                   onClick={() => void startScanner()}
                   disabled={cameraLoading}
                   style={{
-                    height: 52,
+                    height: 46,
                     borderRadius: 18,
                     border: "none",
                     background: "#0F172A",
@@ -803,7 +743,7 @@ export default function AdminScannerPage() {
                 <button
                   onClick={resetResult}
                   style={{
-                    height: 52,
+                    height: 46,
                     borderRadius: 18,
                     border: "1px solid rgba(148,163,184,0.22)",
                     background: "#FFFFFF",
@@ -915,18 +855,6 @@ export default function AdminScannerPage() {
                 >
                   {isValidating ? "Validating..." : "Validate"}
                 </button>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  fontSize: 12,
-                  color: "#64748B",
-                }}
-              >
-                Demo codes: <strong>gf-12345</strong>,{" "}
-                <strong>gf-used-1</strong>, <strong>gf-void-1</strong>,{" "}
-                <strong>gf-refund-1</strong>
               </div>
             </div>
           </div>
@@ -1064,22 +992,13 @@ export default function AdminScannerPage() {
                       gap: 10,
                     }}
                   >
-                    <StatPill
-                      label="Event"
-                      value={result?.eventName || "—"}
-                    />
+                    <StatPill label="Event" value={result?.eventName || "—"} />
                     <StatPill
                       label="Access"
                       value={result?.accessPoint || "Main Door"}
                     />
-                    <StatPill
-                      label="Pass"
-                      value={result?.passType || "—"}
-                    />
-                    <StatPill
-                      label="Code"
-                      value={result?.ticketCode || "—"}
-                    />
+                    <StatPill label="Pass" value={result?.passType || "—"} />
+                    <StatPill label="Code" value={result?.ticketCode || "—"} />
                   </div>
                 </div>
               </div>
@@ -1165,18 +1084,20 @@ export default function AdminScannerPage() {
 
             <div
               style={{
+                width: "100%",
                 borderRadius: 28,
                 border: "1px solid rgba(148,163,184,0.18)",
                 background: "rgba(255,255,255,0.84)",
                 backdropFilter: "blur(16px)",
                 boxShadow: "0 18px 48px rgba(15,23,42,0.06)",
                 padding: 18,
+                textAlign: "left",
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  alignItems: "flex-end",
+                  alignItems: "flex-start",
                   justifyContent: "space-between",
                   gap: 12,
                 }}
@@ -1201,54 +1122,78 @@ export default function AdminScannerPage() {
                       color: "#64748B",
                     }}
                   >
-                    Latest validation and check-in activity for this entry point.
+                    Tap the icon to view latest validation and check-in activity.
                   </div>
                 </div>
 
-                <div
+                <button
+                  onClick={() => setRecentScansOpen(true)}
                   style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 999,
+                    //border: "1px solid rgba(148,163,184,0.16)",
+                    //background: "#F8FAFC",
+                    color: "#64748B",
+                    fontSize: 22,
+                    lineHeight: 1,
+                    fontWeight: 900,
+                    cursor: "pointer",
                     display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
                   }}
+                  aria-label="Open recent scans"
                 >
-                  <div
-                    style={{
-                      borderRadius: 999,
-                      padding: "8px 10px",
-                      background: "#ECFDF5",
-                      color: "#047857",
-                      fontSize: 11,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {scanSummary.checkedIn} Checked In
-                  </div>
-                  <div
-                    style={{
-                      borderRadius: 999,
-                      padding: "8px 10px",
-                      background: "#F8FAFC",
-                      color: "#475569",
-                      fontSize: 11,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {scanSummary.issues} Issues
-                  </div>
-                </div>
+                  ◷
+                </button>
               </div>
 
               <div
                 style={{
-                  marginTop: 16,
-                  display: "grid",
-                  gap: 10,
+                  marginTop: 14,
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
                 }}
               >
-                {recentScans.map((item) => (
-                  <RecentScanRow key={item.id} item={item} />
-                ))}
+                <div
+                  style={{
+                    borderRadius: 999,
+                    padding: "8px 10px",
+                    background: "#ECFDF5",
+                    color: "#047857",
+                    fontSize: 11,
+                    fontWeight: 800,
+                  }}
+                >
+                  {scanSummary.checkedIn} Checked In
+                </div>
+                <div
+                  style={{
+                    borderRadius: 999,
+                    padding: "8px 10px",
+                    background: "#F8FAFC",
+                    color: "#475569",
+                    fontSize: 11,
+                    fontWeight: 800,
+                  }}
+                >
+                  {scanSummary.issues} Issues
+                </div>
+                <div
+                  style={{
+                    borderRadius: 999,
+                    padding: "8px 10px",
+                    background: "#F8FAFC",
+                    color: "#475569",
+                    fontSize: 11,
+                    fontWeight: 800,
+                  }}
+                >
+                  {recentScans.length} Total
+                </div>
               </div>
             </div>
           </div>
@@ -1332,10 +1277,166 @@ export default function AdminScannerPage() {
         </section>
       </div>
 
+      {recentScansOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 40,
+            background: "rgba(15,23,42,0.32)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            padding: 12,
+          }}
+          onClick={() => setRecentScansOpen(false)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 760,
+              maxHeight: "72vh",
+              overflow: "auto",
+              borderRadius: 28,
+              border: "1px solid rgba(148,163,184,0.18)",
+              background: "rgba(255,255,255,0.96)",
+              backdropFilter: "blur(18px)",
+              boxShadow: "0 24px 60px rgba(15,23,42,0.18)",
+              padding: 18,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 5,
+                borderRadius: 999,
+                background: "#CBD5E1",
+                margin: "0 auto 14px",
+              }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 900,
+                    letterSpacing: -0.4,
+                    color: "#020617",
+                  }}
+                >
+                  Recent Scans
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    color: "#64748B",
+                  }}
+                >
+                  Latest validation and check-in activity for this entry point.
+                </div>
+              </div>
+
+              <button
+                onClick={() => setRecentScansOpen(false)}
+                style={{
+                  height: 38,
+                  padding: "0 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(148,163,184,0.18)",
+                  background: "#FFFFFF",
+                  color: "#0F172A",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 16,
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 999,
+                  padding: "8px 10px",
+                  background: "#ECFDF5",
+                  color: "#047857",
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}
+              >
+                {scanSummary.checkedIn} Checked In
+              </div>
+              <div
+                style={{
+                  borderRadius: 999,
+                  padding: "8px 10px",
+                  background: "#F8FAFC",
+                  color: "#475569",
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}
+              >
+                {scanSummary.issues} Issues
+              </div>
+              <div
+                style={{
+                  borderRadius: 999,
+                  padding: "8px 10px",
+                  background: "#F8FAFC",
+                  color: "#475569",
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}
+              >
+                {recentScans.length} Total
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 16,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              {recentScans.map((item) => (
+                <RecentScanRow key={item.id} item={item} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <style jsx>{`
         @media (max-width: 1100px) {
           .scanner-grid {
             grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          #guestflow-scanner-region {
+            min-height: 220px !important;
           }
         }
       `}</style>
