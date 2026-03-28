@@ -234,6 +234,7 @@ function StatPill({
           fontSize: 13,
           fontWeight: 800,
           color: "#0F172A",
+          wordBreak: "break-word",
         }}
       >
         {value}
@@ -260,8 +261,9 @@ export default function AdminScannerPage() {
   const [result, setResult] = useState<ValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
-  const [bannerMessage, setBannerMessage] = useState("")
   const [recentScansOpen, setRecentScansOpen] = useState(false)
+  const [scanSheetOpen, setScanSheetOpen] = useState(false)
+
   const [recentScans, setRecentScans] = useState<RecentScan[]>([
     {
       id: "seed-1",
@@ -288,8 +290,6 @@ export default function AdminScannerPage() {
       status: "invalid",
     },
   ])
-
-  const tone = useMemo(() => toneForStatus(scanStatus), [scanStatus])
 
   const scanSummary = useMemo(() => {
     return {
@@ -326,6 +326,16 @@ export default function AdminScannerPage() {
     []
   )
 
+  const resetResult = useCallback(() => {
+    setScanStatus("idle")
+    setResult(null)
+    setCameraError("")
+    setManualCode("")
+    setScanSheetOpen(false)
+    lastScannedTextRef.current = ""
+    lastScannedAtRef.current = 0
+  }, [])
+
   const validateCode = useCallback(
     async (code: string) => {
       const trimmed = code.trim()
@@ -342,7 +352,7 @@ export default function AdminScannerPage() {
 
       setIsValidating(true)
       setCameraError("")
-      setBannerMessage("")
+      setScanSheetOpen(false)
 
       try {
         const response = await fetch("/api/admin/scanner/validate", {
@@ -367,6 +377,10 @@ export default function AdminScannerPage() {
 
         setScanStatus(nextStatus)
         setResult(data.result)
+
+        if (nextStatus === "valid") {
+          setScanSheetOpen(true)
+        }
 
         if (
           nextStatus === "already_used" ||
@@ -414,7 +428,6 @@ export default function AdminScannerPage() {
 
     setCameraLoading(true)
     setCameraError("")
-    setBannerMessage("")
 
     try {
       isStartingRef.current = true
@@ -477,16 +490,6 @@ export default function AdminScannerPage() {
     }
   }, [stopScanner])
 
-  function resetResult() {
-    setScanStatus("idle")
-    setResult(null)
-    setCameraError("")
-    setBannerMessage("")
-    setManualCode("")
-    lastScannedTextRef.current = ""
-    lastScannedAtRef.current = 0
-  }
-
   async function handleManualValidate() {
     await validateCode(manualCode)
   }
@@ -495,7 +498,6 @@ export default function AdminScannerPage() {
     if (!result || scanStatus !== "valid") return
 
     setIsCheckingIn(true)
-    setBannerMessage("")
 
     setTimeout(() => {
       const checkedInResult: ValidationResult = {
@@ -509,7 +511,6 @@ export default function AdminScannerPage() {
       setResult(checkedInResult)
       setScanStatus("checked_in")
       setIsCheckingIn(false)
-      setBannerMessage("Check-in completed successfully.")
 
       addRecentScan({
         guest: checkedInResult.guestName,
@@ -517,16 +518,12 @@ export default function AdminScannerPage() {
         eventName: checkedInResult.eventName,
         status: "checked_in",
       })
-    }, 450)
-  }
 
-  const canConfirmCheckIn = scanStatus === "valid" && !!result
-  const showResetNext =
-    scanStatus === "checked_in" ||
-    scanStatus === "already_used" ||
-    scanStatus === "invalid" ||
-    scanStatus === "voided" ||
-    scanStatus === "refunded"
+      setTimeout(() => {
+        resetResult()
+      }, 900)
+    }, 350)
+  }
 
   return (
     <div
@@ -775,7 +772,14 @@ export default function AdminScannerPage() {
                 </div>
               ) : null}
             </div>
+          </div>
 
+          <div
+            style={{
+              display: "grid",
+              gap: 16,
+            }}
+          >
             <div
               style={{
                 borderRadius: 28,
@@ -857,230 +861,6 @@ export default function AdminScannerPage() {
                 </button>
               </div>
             </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: 16,
-            }}
-          >
-            <div
-              style={{
-                borderRadius: 28,
-                border: `1px solid ${tone.border}`,
-                background: tone.bg,
-                boxShadow: "0 18px 48px rgba(15,23,42,0.06)",
-                padding: 18,
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  background: tone.pillBg,
-                  color: tone.pillText,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: 0.4,
-                  textTransform: "uppercase",
-                }}
-              >
-                {statusLabel(scanStatus)}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  fontSize: 28,
-                  lineHeight: 1,
-                  fontWeight: 900,
-                  letterSpacing: -0.8,
-                  color: tone.text,
-                }}
-              >
-                {result?.title || "Ready to Scan"}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 14,
-                  lineHeight: 1.7,
-                  color: tone.text,
-                  opacity: 0.86,
-                }}
-              >
-                {result?.description ||
-                  "Point the camera at a GuestFlow QR code to validate entry."}
-              </div>
-
-              {bannerMessage ? (
-                <div
-                  style={{
-                    marginTop: 14,
-                    borderRadius: 16,
-                    border: "1px solid rgba(16,185,129,0.14)",
-                    background: "#FFFFFF",
-                    padding: "12px 14px",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "#047857",
-                  }}
-                >
-                  {bannerMessage}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  marginTop: 18,
-                  borderRadius: 22,
-                  background: "rgba(255,255,255,0.72)",
-                  border: "1px solid rgba(148,163,184,0.14)",
-                  padding: 16,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: 1.4,
-                    textTransform: "uppercase",
-                    color: "#94A3B8",
-                  }}
-                >
-                  Ticket Details
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "grid",
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 900,
-                        color: "#0F172A",
-                      }}
-                    >
-                      {result?.guestName || "—"}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 12,
-                        color: "#64748B",
-                      }}
-                    >
-                      {(result?.passType || "—") +
-                        " • " +
-                        (result?.eventName || "—")}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 10,
-                    }}
-                  >
-                    <StatPill label="Event" value={result?.eventName || "—"} />
-                    <StatPill
-                      label="Access"
-                      value={result?.accessPoint || "Main Door"}
-                    />
-                    <StatPill label="Pass" value={result?.passType || "—"} />
-                    <StatPill label="Code" value={result?.ticketCode || "—"} />
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                <button
-                  onClick={handleConfirmCheckIn}
-                  disabled={!canConfirmCheckIn || isCheckingIn}
-                  style={{
-                    height: 50,
-                    borderRadius: 18,
-                    border: "none",
-                    background: canConfirmCheckIn ? "#0F172A" : "#CBD5E1",
-                    color: "#FFFFFF",
-                    fontSize: 14,
-                    fontWeight: 800,
-                    cursor:
-                      !canConfirmCheckIn || isCheckingIn ? "default" : "pointer",
-                    boxShadow: canConfirmCheckIn
-                      ? "0 14px 30px rgba(15,23,42,0.12)"
-                      : "none",
-                  }}
-                >
-                  {isCheckingIn
-                    ? "Checking In..."
-                    : scanStatus === "checked_in"
-                    ? "Checked In"
-                    : "Confirm Check-In"}
-                </button>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                  }}
-                >
-                  <button
-                    onClick={resetResult}
-                    disabled={!showResetNext && scanStatus !== "valid"}
-                    style={{
-                      height: 46,
-                      borderRadius: 18,
-                      border: "1px solid rgba(148,163,184,0.20)",
-                      background: "#FFFFFF",
-                      color: "#0F172A",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      cursor:
-                        !showResetNext && scanStatus !== "valid"
-                          ? "default"
-                          : "pointer",
-                      opacity:
-                        !showResetNext && scanStatus !== "valid" ? 0.55 : 1,
-                    }}
-                  >
-                    Ready for Next Scan
-                  </button>
-
-                  <button
-                    style={{
-                      height: 46,
-                      borderRadius: 18,
-                      border: "1px solid rgba(148,163,184,0.20)",
-                      background: "#FFFFFF",
-                      color: "#0F172A",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Manual Override
-                  </button>
-                </div>
-              </div>
-            </div>
 
             <div
               style={{
@@ -1132,8 +912,8 @@ export default function AdminScannerPage() {
                     width: 42,
                     height: 42,
                     borderRadius: 999,
-                    //border: "1px solid rgba(148,163,184,0.16)",
-                    //background: "#F8FAFC",
+                    border: "1px solid rgba(148,163,184,0.16)",
+                    background: "#F8FAFC",
                     color: "#64748B",
                     fontSize: 22,
                     lineHeight: 1,
@@ -1422,6 +1202,176 @@ export default function AdminScannerPage() {
               {recentScans.map((item) => (
                 <RecentScanRow key={item.id} item={item} />
               ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {scanSheetOpen && result && scanStatus === "valid" ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(15,23,42,0.32)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              background: "rgba(255,255,255,0.98)",
+              borderTop: "1px solid rgba(148,163,184,0.16)",
+              boxShadow: "0 -18px 44px rgba(15,23,42,0.14)",
+              padding: "16px 16px 24px",
+            }}
+          >
+            <div
+              style={{
+                width: 44,
+                height: 5,
+                borderRadius: 999,
+                background: "#CBD5E1",
+                margin: "0 auto 16px",
+              }}
+            />
+
+            <div
+              style={{
+                maxWidth: 720,
+                margin: "0 auto",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  borderRadius: 999,
+                  padding: "8px 12px",
+                  background: "#D1FAE5",
+                  color: "#047857",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                }}
+              >
+                Success
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 30,
+                  lineHeight: 1,
+                  fontWeight: 900,
+                  letterSpacing: -0.9,
+                  color: "#020617",
+                }}
+              >
+                Scan Successful
+              </div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: "#64748B",
+                }}
+              >
+                GuestFlow pass validated successfully. Review details below and
+                complete check-in.
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  borderRadius: 22,
+                  background: "#F8FAFC",
+                  border: "1px solid rgba(148,163,184,0.12)",
+                  padding: 16,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: "#94A3B8",
+                  }}
+                >
+                  Ticket Details
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 900,
+                        color: "#0F172A",
+                      }}
+                    >
+                      {result.guestName || "—"}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 13,
+                        color: "#64748B",
+                      }}
+                    >
+                      {(result.passType || "—") + " • " + (result.eventName || "—")}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    <StatPill label="Event" value={result.eventName || "—"} />
+                    <StatPill label="Access" value={result.accessPoint || "—"} />
+                    <StatPill label="Pass" value={result.passType || "—"} />
+                    <StatPill label="Code" value={result.ticketCode || "—"} />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleConfirmCheckIn}
+                disabled={isCheckingIn}
+                style={{
+                  marginTop: 18,
+                  width: "100%",
+                  height: 52,
+                  borderRadius: 18,
+                  border: "none",
+                  background: "#0F172A",
+                  color: "#FFFFFF",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  cursor: isCheckingIn ? "default" : "pointer",
+                  boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
+                  opacity: isCheckingIn ? 0.75 : 1,
+                }}
+              >
+                {isCheckingIn ? "Checking In..." : "Check-In"}
+              </button>
             </div>
           </div>
         </div>
