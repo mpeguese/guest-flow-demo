@@ -380,47 +380,50 @@ export default function AdminDashboardPage() {
           </div>
 
           <div
-            style={{
-              marginTop: 18,
-              padding: 12,
-              borderRadius: 22,
-              background:
-                "linear-gradient(135deg, rgba(8,47,73,1) 0%, rgba(15,118,110,0.94) 55%, rgba(245,158,11,0.90) 100%)",
-              color: "#FFFFFF",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.72)",
-              }}
-            >
-              Active Business
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 18,
-                fontWeight: 900,
-                letterSpacing: -0.5,
-              }}
-            >
-              LIV Tampa
-            </div>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: "rgba(255,255,255,0.84)",
-              }}
-            >
-              2 live events tonight • door + table operations active
-            </div>
-          </div>
+  style={{
+    marginTop: 18,
+    padding: 12,
+    borderRadius: 22,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,250,255,0.98) 100%)",
+    color: "#0F172A",
+    boxShadow: "0 -24px 60px rgba(15,23,42,0.18)",
+    border: "1px solid rgba(148,163,184,0.16)",
+  }}
+>
+  <div
+    style={{
+      fontSize: 11,
+      fontWeight: 800,
+      letterSpacing: 1.4,
+      textTransform: "uppercase",
+      color: "#64748B",
+    }}
+  >
+    Active Business
+  </div>
+  <div
+    style={{
+      marginTop: 8,
+      fontSize: 18,
+      fontWeight: 900,
+      letterSpacing: -0.5,
+      color: "#0F172A",
+    }}
+  >
+    LIV Tampa
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      fontSize: 13,
+      lineHeight: 1.5,
+      color: "#526077",
+    }}
+  >
+    2 live events tonight • door + table operations active
+  </div>
+</div>
 
           <div
             style={{
@@ -435,21 +438,38 @@ export default function AdminDashboardPage() {
               onClick={() => router.push("/admin/dashboard")}
             />
             <SideNavItem
+              label="Events"
+              active={pathname === "/admin/events"}
+              onClick={() => router.push("/admin/events")}
+            />
+            <SideNavItem
               label="Scanner"
               active={pathname === "/admin/scanner"}
               onClick={() => router.push("/admin/scanner")}
             />
-            <SideNavItem label="Tickets" />
+            <SideNavItem label="Tickets" 
+              active={pathname === "/admin/tickets"}
+              onClick={() => router.push("/admin/tickets")}
+            />
             <SideNavItem 
               label="Reservations"
               active={pathname === "/admin/reservations"}
               onClick={() => router.push("/admin/reservations")}
             />
             <SideNavItem label="Floor" />
-            <SideNavItem label="Sales Analytics" />
-            <SideNavItem label="Staff" />
+            <SideNavItem label="Sales Analytics" 
+              active={pathname === "/admin/analytics"}
+              onClick={() => router.push("/admin/analytics")}
+            />
+            <SideNavItem label="Staff" 
+              active={pathname === "/admin/staff"}
+              onClick={() => router.push("/admin/staff")}
+            />
             <SideNavItem label="Communications" />
-            <SideNavItem label="Settings" />
+            <SideNavItem label="Settings" 
+              active={pathname === "/admin/settings"}
+              onClick={() => router.push("/admin/settings")}
+            />
           </div>
 
           <div

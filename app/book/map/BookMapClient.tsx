@@ -1332,6 +1332,27 @@ function EchoIcon() {
   )
 }
 
+function AdminPanelIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3l7 3v5c0 4.6-2.8 7.9-7 10-4.2-2.1-7-5.4-7-10V6l7-3z" />
+      <path d="M9.5 12h5" />
+      <path d="M12 9.5v5" />
+    </svg>
+  )
+}
+
 export default function BookMapPage() {
   const router = useRouter()
   const sp = useSearchParams()
@@ -1806,9 +1827,9 @@ export default function BookMapPage() {
             </button>
 
             <button
-              onClick={() => router.push("/profile")}
-              aria-label="Open profile"
-              title="Open profile"
+              onClick={() => router.push("/admin/login")}
+              aria-label="Open admin panel"
+              title="Open admin panel"
               style={{
                 width: 38,
                 height: 38,
@@ -1823,7 +1844,7 @@ export default function BookMapPage() {
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
               }}
             >
-              <ProfileIcon />
+              <AdminPanelIcon />
             </button>
           </div>
         </div>
@@ -2118,7 +2139,7 @@ export default function BookMapPage() {
 
               <button
                 onClick={() => router.push("/echo")}
-                aria-label="Open pulse"
+                aria-label="Open echo"
                 style={{
                   border: "none",
                   background: "transparent",
@@ -2137,12 +2158,12 @@ export default function BookMapPage() {
               </button>
 
               <button
-                onClick={() => router.push("/book/cart")}
-                aria-label="Open cart"
+                onClick={() => router.push("/profile")}
+                aria-label="Open profile"
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: COLORS.text,
+                  color: COLORS.primaryHover,
                   width: 56,
                   height: 56,
                   display: "grid",
@@ -2151,9 +2172,9 @@ export default function BookMapPage() {
                   position: "relative",
                 }}
               >
-                <CartIcon />
+                <ProfileIcon />
 
-                {cartCount > 0 ? (
+                {/* {cartCount > 0 ? (
                   <span
                     style={{
                       position: "absolute",
@@ -2173,9 +2194,9 @@ export default function BookMapPage() {
                   >
                     {cartCount}
                   </span>
-                ) : null}
+                ) : null} */}
                 <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>
-                  Cart
+                  Profile
                 </div>
               </button>
             </div>
