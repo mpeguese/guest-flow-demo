@@ -1371,6 +1371,27 @@ export default function BookMapPage() {
   const partySize = parsePartySize(rawPartySize)
   const session = sp.get("session") || ""
 
+  const eventSlug = sp.get("event") || ""
+  const isEventMode = !!eventSlug
+
+  const EVENT_META: Record<
+    string,
+  {
+    name: string
+    venueName: string
+    date: string
+  }
+  > = {
+  "daer-sundays": {
+    name: "Sundays",
+    venueName: "DAER Dayclub",
+    date: "2026-04-12",
+  },
+}
+
+const activeEvent = eventSlug ? EVENT_META[eventSlug] ?? null : null
+const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+
   const filteredZones = useMemo(() => {
     if (!rawPartySize || partySize === null) {
       return venueZones
@@ -1706,7 +1727,7 @@ export default function BookMapPage() {
           minHeight: "100dvh",
         }}
       >
-        {inventoryTileOpen ? (
+        {inventoryTileOpen && !isEventMode ? (
         <div
           style={{
             position: "absolute",
@@ -1921,6 +1942,7 @@ export default function BookMapPage() {
             {mounted ? (
               <button
                 onClick={() => {
+                  if (isEventMode) return
                   setReopenPassModalAfterDatePick(false)
                   setReopenPromotionsModalAfterDatePick(false)
                   setDatePickerOpen(true)
@@ -1936,7 +1958,8 @@ export default function BookMapPage() {
                   color: COLORS.text,
                   fontSize: 13,
                   fontWeight: 800,
-                  cursor: "pointer",
+                  cursor: isEventMode ? "default" : "pointer",
+                  opacity: isEventMode ? 0.94 : 1,
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1950,7 +1973,9 @@ export default function BookMapPage() {
               >
                 <CalendarIcon />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {formatDisplayDate(date)}
+                  {isEventMode && activeEvent
+                  ? `${activeEvent.name} · ${formatDisplayDate(activeEvent.date)}`
+                  : formatDisplayDate(date)}
                 </span>
               </button>
             ) : (
@@ -2007,7 +2032,7 @@ export default function BookMapPage() {
                 </span>
               ) : null}
             </button>
-
+          {!isEventMode ? (
             <button
               onClick={() => router.push("/admin/login")}
               aria-label="Open admin panel"
@@ -2028,6 +2053,7 @@ export default function BookMapPage() {
             >
               <AdminPanelIcon />
             </button>
+          ) : null}
           </div>
         </div>
 
@@ -2077,7 +2103,7 @@ export default function BookMapPage() {
           </div>
         ) : null}
 
-        {passesCardOpen ? (
+        {passesCardOpen && !isEventMode ? (
           <div
             style={{
               position: "fixed",
