@@ -631,7 +631,7 @@ export default function AdminScannerPage() {
                   borderRadius: 28,
                   minHeight: 320,
                   background:
-                    "linear-gradient(145deg, rgba(8,47,73,0.98) 0%, rgba(15,118,110,0.96) 52%, rgba(245,158,11,0.92) 100%)",
+                    "linear-gradient(145deg, rgba(186,230,253,0.98) 0%, rgba(125,211,252,0.95) 38%, rgba(103,232,249,0.92) 68%, rgba(254,215,170,0.92) 100%)",
                   position: "relative",
                   overflow: "hidden",
                   padding: 24,
@@ -642,7 +642,7 @@ export default function AdminScannerPage() {
                     position: "absolute",
                     inset: 0,
                     background:
-                      "radial-gradient(circle at top right, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 36%)",
+                      "radial-gradient(circle at top right, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.12) 28%, rgba(255,255,255,0) 52%)",
                     pointerEvents: "none",
                   }}
                 />
@@ -667,9 +667,10 @@ export default function AdminScannerPage() {
                       minHeight: 240,
                       borderRadius: 24,
                       overflow: "hidden",
-                      border: "2px solid rgba(255,255,255,0.28)",
-                      background: "rgba(255,255,255,0.08)",
-                      backdropFilter: "blur(10px)",
+                      border: "2px solid rgba(255,255,255,0.52)",
+                      background: "rgba(255,255,255,0.22)",
+                      backdropFilter: "blur(12px)",
+                      boxShadow: "0 20px 40px rgba(14,165,233,0.10)",
                     }}
                   />
 
@@ -677,7 +678,7 @@ export default function AdminScannerPage() {
                     <div
                       style={{
                         textAlign: "center",
-                        color: "#FFFFFF",
+                        color: "#0F172A",
                         maxWidth: 320,
                         margin: "0 auto",
                       }}
@@ -688,7 +689,7 @@ export default function AdminScannerPage() {
                           fontWeight: 800,
                           letterSpacing: 1.4,
                           textTransform: "uppercase",
-                          color: "rgba(255,255,255,0.76)",
+                          color: "rgba(15,23,42,0.58)",
                         }}
                       >
                         Camera Preview
@@ -701,6 +702,7 @@ export default function AdminScannerPage() {
                           lineHeight: 1,
                           fontWeight: 900,
                           letterSpacing: -0.8,
+                          color: "#0F172A",
                         }}
                       >
                         Ready to Scan
@@ -725,12 +727,12 @@ export default function AdminScannerPage() {
                     height: 46,
                     borderRadius: 18,
                     border: "none",
-                    background: "#0F172A",
+                    background: "linear-gradient(135deg, #93C5FD 0%, #7DD3FC 100%)",
                     color: "#FFFFFF",
                     fontSize: 15,
                     fontWeight: 800,
                     cursor: cameraLoading ? "default" : "pointer",
-                    boxShadow: "0 16px 32px rgba(15,23,42,0.12)",
+                    boxShadow: "0 14px 28px rgba(96,165,250,0.22)",
                     opacity: cameraLoading ? 0.7 : 1,
                   }}
                 >
@@ -848,7 +850,8 @@ export default function AdminScannerPage() {
                     padding: "0 18px",
                     borderRadius: 18,
                     border: "none",
-                    background: "#0F766E",
+                    background: "linear-gradient(135deg, #93C5FD 0%, #7DD3FC 100%)",
+                    boxShadow: "0 14px 28px rgba(96,165,250,0.22)",
                     color: "#FFFFFF",
                     fontSize: 14,
                     fontWeight: 800,
@@ -1023,7 +1026,7 @@ export default function AdminScannerPage() {
                 flex: 1.1,
                 height: 48,
                 borderRadius: 999,
-                background: "#0F172A",
+                background: "linear-gradient(135deg, #38BDF8 0%, #22D3EE 100%)",
                 color: "#FFFFFF",
                 display: "inline-flex",
                 alignItems: "center",

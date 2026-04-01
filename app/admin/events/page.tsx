@@ -870,7 +870,7 @@ function EventCard({
         <MetaPill label={event.allowReservations ? "Reservations On" : "Reservations Off"} tone="aqua" />
         <MetaPill label={event.allowPasses ? "Passes On" : "Passes Off"} tone="coral" />
         <MetaPill
-          label={event.mediaType ? `${event.mediaType === "image" ? "Hero Image" : "Hero Video"}` : "No Media"}
+          label={event.mediaType ? `${event.mediaType === "image" ? "Image" : "Video"}` : "No Media"}
           tone="neutral"
         />
       </div>
@@ -1249,7 +1249,7 @@ function EventWizardModal({
             }}
           >
             {[
-              { n: 1, label: "Hero Media" },
+              { n: 1, label: "Media" },
               { n: 2, label: "Series & Basics" },
               { n: 3, label: "Rules & Publish" },
             ].map((item) => {
@@ -1304,7 +1304,7 @@ function EventWizardModal({
                 <SegmentedControl
                   value={form.mediaType || "image"}
                   options={[
-                    { value: "image", label: "Hero Image" },
+                    { value: "image", label: "Image" },
                     { value: "video", label: "Short Video" },
                   ]}
                   onChange={(value) => onPickMediaType(value as "image" | "video")}
@@ -1364,7 +1364,7 @@ function EventWizardModal({
                     >
                       {form.mediaType === "video"
                         ? "Upload short video"
-                        : "Upload hero image"}
+                        : "Upload image"}
                     </div>
                     <div
                       style={{
@@ -1445,8 +1445,8 @@ function EventWizardModal({
                     }}
                   >
                     {form.mediaType
-                      ? `Currently set as ${form.mediaType === "image" ? "hero image" : "hero video"}.`
-                      : "Choose hero image or short video to continue."}
+                      ? `Currently set as ${form.mediaType === "image" ? "image" : "video"}.`
+                      : "Choose image or short video to continue."}
                   </div>
                 </div>
               </div>

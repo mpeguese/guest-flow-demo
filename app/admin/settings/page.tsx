@@ -408,7 +408,7 @@ function ColorPill({
     </div>
   )
 }
-
+// REMOVE STATUS CARD
 function StatusCard({
   label,
   value,
@@ -636,7 +636,7 @@ export default function SettingsPage() {
             marginBottom: 18,
           }}
         >
-          <StatusCard
+          {/* <StatusCard
             label="Business Profile"
             value="Configured"
             helper="Organization profile, support contact, and venue details are ready."
@@ -653,7 +653,7 @@ export default function SettingsPage() {
             value="Miami Theme"
             helper="Guest-facing surfaces are aligned with the current GuestFlow visual style."
             tone="coral"
-          />
+          /> */}
         </div>
 
         <div

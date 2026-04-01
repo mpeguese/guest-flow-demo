@@ -1388,11 +1388,12 @@ export default function BookMapPage() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectionModalOpen, setSelectionModalOpen] = useState(false)
   const [selectionDraft, setSelectionDraft] = useState<FrozenSelection | null>(null)
-
+  const [inventoryTileOpen, setInventoryTileOpen] = useState(true)
   const [cartMessage, setCartMessage] = useState("")
   const [passModalOpen, setPassModalOpen] = useState(false)
   const [promotionsModalOpen, setPromotionsModalOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+
   const [reopenPassModalAfterDatePick, setReopenPassModalAfterDatePick] = useState(false)
   const [reopenPromotionsModalAfterDatePick, setReopenPromotionsModalAfterDatePick] =
     useState(false)
@@ -1416,6 +1417,40 @@ export default function BookMapPage() {
       venueZones.map((zone) => [zone.id, getZoneStatus(date, zone.id)])
     )
   }, [date])
+  
+  const inventorySummary = useMemo(() => {
+    const availableTables = filteredZones.filter((zone) => {
+      const status = statusByZoneId[zone.id]
+      return status === "available" || status === "limited"
+    })
+
+    const limitedTables = filteredZones.filter(
+      (zone) => statusByZoneId[zone.id] === "limited"
+    )
+
+    const soldOutTables = filteredZones.filter(
+      (zone) => statusByZoneId[zone.id] === "booked"
+    )
+
+    const tableStartPrice =
+      availableTables.length > 0
+        ? Math.min(...availableTables.map((zone) => zone.price))
+        : null
+
+    const passStartPrice =
+      passProducts.length > 0
+        ? Math.min(...passProducts.map((pass) => pass.price))
+        : null
+
+    return {
+      availableTables: availableTables.length,
+      limitedTables: limitedTables.length,
+      soldOutTables: soldOutTables.length,
+      tableStartPrice,
+      passCount: passProducts.length,
+      passStartPrice,
+    }
+  }, [filteredZones, statusByZoneId])
 
   const selectedZone = venueZones.find((zone) => zone.id === selectedZoneId)
   const selectedStatus = selectedZoneId ? statusByZoneId[selectedZoneId] : undefined
@@ -1668,11 +1703,158 @@ export default function BookMapPage() {
       <div
         style={{
           position: "relative",
-          height: "100dvh",
-          overflow: "hidden",
-          background: COLORS.bg,
+          minHeight: "100dvh",
         }}
       >
+        {inventoryTileOpen ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 88,
+            left: 16,
+            right: 16,
+            zIndex: 12,
+            display: "flex",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              borderRadius: 24,
+              background: "rgba(255,255,255,0.2)",
+              border: "1px solid rgba(217,232,236,0.62)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              boxShadow: "0 18px 40px rgba(15,23,42,0.12)",
+              //backdropFilter: "blur(14px)",
+              //WebkitBackdropFilter: "blur(14px)",
+              padding: 14,
+              pointerEvents: "auto",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 900,
+                    letterSpacing: -0.5,
+                    color: COLORS.text,
+                    lineHeight: 1.05,
+                  }}
+                >
+                  {formatDisplayDate(date)}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 13,
+                    color: COLORS.textSoft,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {inventorySummary.passCount} ticket options ·{" "}
+                  {inventorySummary.passStartPrice === 0
+                    ? "From Free"
+                    : inventorySummary.passStartPrice !== null
+                      ? `From $${inventorySummary.passStartPrice}`
+                      : "Unavailable"}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 13,
+                    color: COLORS.textSoft,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {inventorySummary.availableTables} tables available ·{" "}
+                  {inventorySummary.tableStartPrice !== null
+                    ? `From $${inventorySummary.tableStartPrice}`
+                    : "Unavailable"}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setInventoryTileOpen(false)}
+                aria-label="Dismiss inventory panel"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  //border: `1px solid ${COLORS.border}`,
+                  //background: "rgba(255,255,255,0.82)",
+                  color: COLORS.text,
+                  fontSize: 26,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: 14,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setPassModalOpen(true)}
+                style={{
+                  flex: 1,
+                  height: 42,
+                  borderRadius: 14,
+                  border: "none",
+                  background: "linear-gradient(135deg, #60A5FA 0%, #38BDF8 100%)",
+                  color: "#FFFFFF",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 20px rgba(96,165,250,0.18)",
+                }}
+              >
+                View Tickets
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInventoryTileOpen(false)}
+                style={{
+                  flex: 1,
+                  height: 42,
+                  borderRadius: 14,
+                  border: `1px solid ${COLORS.border}`,
+                  background: "rgba(255,255,255,0.88)",
+                  color: COLORS.text,
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                Explore Map
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
         <VenueMap
           zones={filteredZones}
           statusByZoneId={statusByZoneId}

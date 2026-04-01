@@ -195,7 +195,7 @@ export default function VenueMap({
         }}
       >
         <TransformWrapper
-          initialScale={1.45}
+          initialScale={1.7}
           minScale={1.25}
           maxScale={2.2}
           initialPositionY={-100}

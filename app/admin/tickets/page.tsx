@@ -1,12 +1,16 @@
+// app/admin/tickets/page.tsx
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+
+type TicketCategory = "GA" | "VIP" | "Early Bird" | "Comp" | "Late Bird"
+type TicketLiveStatus = "Live" | "Paused"
 
 type TicketProduct = {
   id: string
   name: string
-  category: "GA" | "VIP" | "Early Bird" | "Comp"
+  category: TicketCategory
   price: number
   sold: number
   scanned: number
@@ -27,6 +31,16 @@ type TicketRecord = {
   purchasedAt: string
   scannedAt?: string
   channel: "App" | "Promoter Link" | "Walk-Up" | "Comp"
+}
+
+type AddTicketFormState = {
+  name: string
+  priceType: "Free" | "Paid"
+  price: string
+  category: Exclude<TicketCategory, "Comp">
+  quantity: string
+  status: TicketLiveStatus
+  saleWindow: string
 }
 
 const initialProducts: TicketProduct[] = [
@@ -161,6 +175,16 @@ const initialRecords: TicketRecord[] = [
   },
 ]
 
+const defaultAddTicketForm: AddTicketFormState = {
+  name: "",
+  priceType: "Paid",
+  price: "",
+  category: "GA",
+  quantity: "",
+  status: "Live",
+  saleWindow: "Now - 11:30 PM",
+}
+
 function formatMoney(value: number) {
   return value === 0 ? "Free" : `$${value}`
 }
@@ -226,6 +250,12 @@ function categoryColors(category: TicketProduct["category"]) {
         color: "#9A3412",
         border: "rgba(251,146,60,0.30)",
       }
+    case "Late Bird":
+      return {
+        bg: "rgba(34,197,94,0.14)",
+        color: "#166534",
+        border: "rgba(34,197,94,0.30)",
+      }
     case "Comp":
       return {
         bg: "rgba(168,85,247,0.12)",
@@ -249,14 +279,12 @@ export default function AdminTicketsPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"All" | TicketStatus>("All")
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
-  const [showOnlyLiveProducts, setShowOnlyLiveProducts] = useState(false)
   const [doorMode, setDoorMode] = useState(true)
   const [flashMessage, setFlashMessage] = useState("")
-
-  const filteredProducts = useMemo(() => {
-    if (!showOnlyLiveProducts) return products
-    return products.filter((p) => p.live)
-  }, [products, showOnlyLiveProducts])
+  const [showAddTicketModal, setShowAddTicketModal] = useState(false)
+  const [ticketForm, setTicketForm] =
+    useState<AddTicketFormState>(defaultAddTicketForm)
+  const [ticketFormError, setTicketFormError] = useState("")
 
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
@@ -274,23 +302,23 @@ export default function AdminTicketsPage() {
   const selectedRecord =
     records.find((record) => record.id === selectedRecordId) ?? null
 
-  const totals = useMemo(() => {
-    const totalSold = products.reduce((sum, item) => sum + item.sold, 0)
-    const totalScanned = products.reduce((sum, item) => sum + item.scanned, 0)
-    const totalCapacity = products.reduce((sum, item) => sum + item.capacity, 0)
-    const remainingCapacity = Math.max(totalCapacity - totalSold, 0)
-    const refundedOrVoided = records.filter(
-      (item) => item.status === "Refunded" || item.status === "Voided"
-    ).length
-
-    return {
-      totalSold,
-      totalScanned,
-      totalCapacity,
-      remainingCapacity,
-      refundedOrVoided,
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setShowAddTicketModal(false)
+      }
     }
-  }, [products, records])
+
+    if (showAddTicketModal) {
+      window.addEventListener("keydown", onKeyDown)
+      document.body.style.overflow = "hidden"
+    }
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      document.body.style.overflow = ""
+    }
+  }, [showAddTicketModal])
 
   function showFlash(text: string) {
     setFlashMessage(text)
@@ -383,149 +411,178 @@ export default function AdminTicketsPage() {
     showFlash("Comp ticket created")
   }
 
+  function resetTicketForm() {
+    setTicketForm(defaultAddTicketForm)
+    setTicketFormError("")
+  }
+
+  function openAddTicketModal() {
+    resetTicketForm()
+    setShowAddTicketModal(true)
+  }
+
+  function closeAddTicketModal() {
+    setShowAddTicketModal(false)
+    setTicketFormError("")
+  }
+
+  function saveNewTicket() {
+    const name = ticketForm.name.trim()
+    const quantity = Number(ticketForm.quantity)
+    const priceValue =
+      ticketForm.priceType === "Free" ? 0 : Number(ticketForm.price)
+
+    if (!name) {
+      setTicketFormError("Please enter a ticket name.")
+      return
+    }
+
+    if (!ticketForm.quantity || Number.isNaN(quantity) || quantity <= 0) {
+      setTicketFormError("Please enter a valid quantity.")
+      return
+    }
+
+    if (
+      ticketForm.priceType === "Paid" &&
+      (!ticketForm.price || Number.isNaN(priceValue) || priceValue < 0)
+    ) {
+      setTicketFormError("Please enter a valid paid price.")
+      return
+    }
+
+    const newProduct: TicketProduct = {
+      id: `tp_${Date.now()}`,
+      name,
+      category: ticketForm.category,
+      price: priceValue,
+      sold: 0,
+      scanned: 0,
+      capacity: quantity,
+      live: ticketForm.status === "Live",
+      saleWindow: ticketForm.saleWindow,
+    }
+
+    setProducts((current) => [newProduct, ...current])
+    setShowAddTicketModal(false)
+    resetTicketForm()
+    showFlash("Ticket added")
+  }
+
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        background:
-          "linear-gradient(180deg, #FFF8F1 0%, #F2FBFF 45%, #ECFEFF 100%)",
-        padding: "20px 16px 32px",
-        color: "#0F172A",
-      }}
-    >
+    <>
       <div
         style={{
-          width: "100%",
-          maxWidth: 1300,
-          margin: "0 auto",
-          display: "grid",
-          gap: 18,
+          minHeight: "100dvh",
+          background:
+            "linear-gradient(180deg, #FFF8F1 0%, #F2FBFF 45%, #ECFEFF 100%)",
+          padding: "20px 16px 32px",
+          color: "#0F172A",
         }}
       >
         <div
           style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: 1.5,
-                color: "#0EA5E9",
-                marginBottom: 6,
-                textTransform: "uppercase",
-              }}
-            >
-              Miami Ticket Ops
-            </div>
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 32,
-                lineHeight: 1.05,
-                fontWeight: 900,
-                letterSpacing: -0.8,
-              }}
-            >
-              Tickets
-            </h1>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 15,
-                color: "#475569",
-                maxWidth: 760,
-                lineHeight: 1.55,
-              }}
-            >
-              Manage ticket inventory, track admissions, and resolve guest
-              issues at the door.
-            </div>
-          </div>
-
-          <button
-            onClick={() => router.push("/admin/dashboard")}
-            style={{
-              border: "none",
-              background: "linear-gradient(135deg, #06B6D4 0%, #0EA5E9 100%)",
-              color: "#FFFFFF",
-              padding: "12px 18px",
-              borderRadius: 16,
-              fontSize: 14,
-              fontWeight: 800,
-              cursor: "pointer",
-              boxShadow: "0 12px 28px rgba(14,165,233,0.22)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Dashboard
-          </button>
-        </div>
-
-        {flashMessage ? (
-          <div
-            style={{
-              padding: "12px 14px",
-              borderRadius: 16,
-              background: "rgba(16,185,129,0.10)",
-              border: "1px solid rgba(16,185,129,0.22)",
-              color: "#065F46",
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            {flashMessage}
-          </div>
-        ) : null}
-
-        <div
-          style={{
+            width: "100%",
+            maxWidth: 1300,
+            margin: "0 auto",
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <MetricCard
-            title="Tickets Sold"
-            value={String(totals.totalSold)}
-            subtext="Across all active ticket products"
-            accent="cyan"
-          />
-          <MetricCard
-            title="Checked In"
-            value={String(totals.totalScanned)}
-            subtext="Tickets successfully scanned"
-            accent="sky"
-          />
-          <MetricCard
-            title="Remaining Capacity"
-            value={String(totals.remainingCapacity)}
-            subtext={`${totals.totalCapacity} total event capacity`}
-            accent="orange"
-          />
-          <MetricCard
-            title="Refunds / Voids"
-            value={String(totals.refundedOrVoided)}
-            subtext="Requires manager visibility"
-            accent="pink"
-          />
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.15fr 0.85fr",
             gap: 18,
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 1.5,
+                  color: "#0EA5E9",
+                  marginBottom: 6,
+                  textTransform: "uppercase",
+                }}
+              >
+                Miami Ticket Ops
+              </div>
+
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 32,
+                  lineHeight: 1.05,
+                  fontWeight: 900,
+                  letterSpacing: -0.8,
+                }}
+              >
+                Tickets
+              </h1>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <button
+                onClick={openAddTicketModal}
+                style={actionButtonStyle("secondary")}
+              >
+                Add Ticket
+              </button>
+
+              <button
+                onClick={() => {
+                  setProducts((current) =>
+                    current.map((item) => ({ ...item, live: false }))
+                  )
+                  showFlash("All ticket sales paused")
+                }}
+                style={actionButtonStyle("secondary")}
+              >
+                Pause All Sales
+              </button>
+
+              <button
+                onClick={() => showFlash("Export prepared")}
+                style={actionButtonStyle("secondary")}
+              >
+                Export
+              </button>
+
+              <button
+                onClick={() => router.push("/admin/dashboard")}
+                style={actionButtonStyle("primary")}
+              >
+                Dashboard
+              </button>
+            </div>
+          </div>
+
+          {flashMessage ? (
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 16,
+                background: "rgba(16,185,129,0.10)",
+                border: "1px solid rgba(16,185,129,0.22)",
+                color: "#065F46",
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              {flashMessage}
+            </div>
+          ) : null}
+
           <section
             style={{
               background: "rgba(255,255,255,0.84)",
@@ -538,66 +595,14 @@ export default function AdminTicketsPage() {
           >
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 900,
-                    letterSpacing: -0.3,
-                  }}
-                >
-                  Ticket Products
-                </div>
-                <div
-                  style={{
-                    marginTop: 4,
-                    color: "#64748B",
-                    fontSize: 14,
-                  }}
-                >
-                  Control pricing, inventory, and sale status.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <TogglePill
-                  label="Live Only"
-                  active={showOnlyLiveProducts}
-                  onClick={() => setShowOnlyLiveProducts((v) => !v)}
-                />
-                <button
-                  onClick={createCompTicket}
-                  style={actionButtonStyle("secondary")}
-                >
-                  Create Comp
-                </button>
-              </div>
-            </div>
-
-            <div
-              style={{
                 display: "grid",
-                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 14,
               }}
             >
-              {filteredProducts.map((product) => {
+              {products.map((product) => {
                 const remaining = Math.max(product.capacity - product.sold, 0)
-                const fillPct =
+                const soldPct =
                   product.capacity > 0
                     ? Math.min((product.sold / product.capacity) * 100, 100)
                     : 0
@@ -609,9 +614,10 @@ export default function AdminTicketsPage() {
                     style={{
                       border: "1px solid rgba(148,163,184,0.14)",
                       background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(248,250,252,0.92) 100%)",
-                      borderRadius: 22,
-                      padding: 16,
+                        "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
+                      borderRadius: 24,
+                      padding: 18,
+                      minWidth: 0,
                     }}
                   >
                     <div
@@ -623,7 +629,7 @@ export default function AdminTicketsPage() {
                         flexWrap: "wrap",
                       }}
                     >
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div
                           style={{
                             display: "flex",
@@ -634,7 +640,7 @@ export default function AdminTicketsPage() {
                         >
                           <div
                             style={{
-                              fontSize: 17,
+                              fontSize: 18,
                               fontWeight: 900,
                               letterSpacing: -0.2,
                             }}
@@ -692,56 +698,78 @@ export default function AdminTicketsPage() {
                               {formatMoney(product.price)}
                             </strong>
                           </span>
-                          <span>Window: {product.saleWindow}</span>
+                          <span>{product.saleWindow}</span>
                         </div>
                       </div>
 
                       <button
                         onClick={() => toggleProductLive(product.id)}
                         style={{
-                          ...actionButtonStyle(product.live ? "muted" : "primary"),
+                          ...actionButtonStyle(product.live ? "muted" : "secondary"),
                           minWidth: 108,
                         }}
                       >
-                        {product.live ? "Pause Sales" : "Go Live"}
+                        {product.live ? "Pause" : "Go Live"}
                       </button>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 18,
+                        display: "flex",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <SingleDonut
+                        value={product.sold}
+                        total={product.capacity}
+                        percentage={soldPct}
+                        centerLabel="Sold"
+                      />
                     </div>
 
                     <div
                       style={{
                         marginTop: 16,
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                         gap: 10,
                       }}
                     >
                       <MiniStat label="Sold" value={String(product.sold)} />
                       <MiniStat label="Scanned" value={String(product.scanned)} />
-                      <MiniStat label="Remaining" value={String(remaining)} />
                       <MiniStat label="Capacity" value={String(product.capacity)} />
                     </div>
 
                     <div
                       style={{
-                        marginTop: 14,
+                        marginTop: 10,
+                        display: "flex",
+                        justifyContent: "center",
                       }}
                     >
                       <div
                         style={{
-                          height: 10,
-                          borderRadius: 999,
-                          background: "rgba(14,165,233,0.10)",
-                          overflow: "hidden",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 12px",
+                          borderRadius: 14,
+                          background: "rgba(248,250,252,0.9)",
+                          border: "1px solid rgba(148,163,184,0.12)",
+                          flexWrap: "wrap",
+                          justifyContent: "center",
                         }}
                       >
-                        <div
-                          style={{
-                            width: `${fillPct}%`,
-                            height: "100%",
-                            borderRadius: 999,
-                            background:
-                              "linear-gradient(90deg, #22D3EE 0%, #38BDF8 55%, #FB7185 100%)",
-                          }}
+                        <LegendDot
+                          label="Remaining"
+                          color="#E2E8F0"
+                          value={remaining}
+                        />
+                        <LegendDot
+                          label="Sold"
+                          color="#FB7185"
+                          value={product.sold}
                         />
                       </div>
                     </div>
@@ -751,27 +779,281 @@ export default function AdminTicketsPage() {
             </div>
           </section>
 
-          <section
+          <div
             style={{
-              background: "rgba(255,255,255,0.84)",
-              border: "1px solid rgba(148,163,184,0.16)",
-              borderRadius: 26,
-              boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
-              padding: 18,
-              minWidth: 0,
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
+              gap: 18,
             }}
           >
-            <div
+            <section
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-                alignItems: "center",
-                flexWrap: "wrap",
-                marginBottom: 14,
+                background: "rgba(255,255,255,0.88)",
+                border: "1px solid rgba(148,163,184,0.16)",
+                borderRadius: 26,
+                boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
+                padding: 18,
+                overflow: "hidden",
+                minWidth: 0,
               }}
             >
-              <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 900,
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  Recent Ticket Activity
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search buyer, order ID, email..."
+                    style={{
+                      width: 280,
+                      maxWidth: "100%",
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(148,163,184,0.22)",
+                      outline: "none",
+                      fontSize: 14,
+                      background: "#FFFFFF",
+                      color: "#0F172A",
+                    }}
+                  />
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(e.target.value as "All" | TicketStatus)
+                    }
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(148,163,184,0.22)",
+                      outline: "none",
+                      fontSize: 14,
+                      background: "#FFFFFF",
+                      color: "#0F172A",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Scanned">Scanned</option>
+                    <option value="Refunded">Refunded</option>
+                    <option value="Voided">Voided</option>
+                    <option value="Transferred">Transferred</option>
+                  </select>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  overflowX: "auto",
+                  borderRadius: 18,
+                  border: "1px solid rgba(148,163,184,0.14)",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: 980,
+                    background: "#FFFFFF",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        background:
+                          "linear-gradient(90deg, rgba(34,211,238,0.08) 0%, rgba(251,113,133,0.08) 100%)",
+                      }}
+                    >
+                      {[
+                        "Buyer",
+                        "Order ID",
+                        "Ticket",
+                        "Channel",
+                        "Status",
+                        "Purchased",
+                        "Scanned",
+                        "Actions",
+                      ].map((heading) => (
+                        <th
+                          key={heading}
+                          style={{
+                            textAlign: "left",
+                            padding: "14px 14px",
+                            fontSize: 12,
+                            color: "#475569",
+                            fontWeight: 900,
+                            letterSpacing: 1,
+                            textTransform: "uppercase",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {filteredRecords.map((record) => {
+                      const statusStyle = statusColors(record.status)
+
+                      return (
+                        <tr
+                          key={record.id}
+                          onClick={() => setSelectedRecordId(record.id)}
+                          style={{
+                            borderTop: "1px solid rgba(148,163,184,0.10)",
+                            cursor: "pointer",
+                            background:
+                              selectedRecordId === record.id
+                                ? "rgba(14,165,233,0.04)"
+                                : "#FFFFFF",
+                          }}
+                        >
+                          <td style={cellStyle}>
+                            <div style={{ fontWeight: 800, color: "#0F172A" }}>
+                              {record.buyerName}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "#64748B",
+                                marginTop: 3,
+                              }}
+                            >
+                              {record.email}
+                            </div>
+                          </td>
+
+                          <td style={cellStyle}>{record.orderId}</td>
+                          <td style={cellStyle}>{record.ticketType}</td>
+                          <td style={cellStyle}>{record.channel}</td>
+
+                          <td style={cellStyle}>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "7px 10px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 800,
+                                background: statusStyle.bg,
+                                color: statusStyle.color,
+                                border: `1px solid ${statusStyle.border}`,
+                              }}
+                            >
+                              {record.status}
+                            </span>
+                          </td>
+
+                          <td style={cellStyle}>{record.purchasedAt}</td>
+                          <td style={cellStyle}>{record.scannedAt ?? "—"}</td>
+
+                          <td style={cellStyle}>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!doorMode) {
+                                    showFlash(
+                                      "Enable Door Mode to check guests in"
+                                    )
+                                    return
+                                  }
+                                  handleRecordAction(record.id, "scan")
+                                }}
+                                style={tinyActionStyle("#06B6D4", !doorMode)}
+                              >
+                                Check In
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRecordAction(record.id, "resend")
+                                }}
+                                style={tinyActionStyle("#FB7185")}
+                              >
+                                Resend
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+
+                    {filteredRecords.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          style={{
+                            padding: "28px 18px",
+                            textAlign: "center",
+                            color: "#64748B",
+                            fontWeight: 700,
+                          }}
+                        >
+                          No ticket records match your current filters.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section
+              style={{
+                background: "rgba(255,255,255,0.84)",
+                border: "1px solid rgba(148,163,184,0.16)",
+                borderRadius: 26,
+                boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
+                padding: 18,
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginBottom: 14,
+                }}
+              >
                 <div
                   style={{
                     fontSize: 20,
@@ -781,403 +1063,376 @@ export default function AdminTicketsPage() {
                 >
                   Door Controls
                 </div>
+
+                <TogglePill
+                  label="Door Mode"
+                  active={doorMode}
+                  onClick={() => {
+                    setDoorMode((v) => !v)
+                    showFlash(`Door mode ${!doorMode ? "enabled" : "disabled"}`)
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                <ActionBlock
+                  title="Manual Check-In"
+                  subtitle="Mark a guest present if scanning fails."
+                  buttonLabel="Enable"
+                  onClick={() => {
+                    if (!doorMode) {
+                      showFlash("Enable Door Mode first")
+                      return
+                    }
+                    showFlash("Manual check-in enabled")
+                  }}
+                  disabled={!doorMode}
+                />
+                <ActionBlock
+                  title="Resend Ticket"
+                  subtitle="Quickly resend a pass to the guest."
+                  buttonLabel="Send"
+                  onClick={() => showFlash("Ticket resend started")}
+                />
+                <ActionBlock
+                  title="Create Comp"
+                  subtitle="Issue a comp ticket for a guest at the door."
+                  buttonLabel="Create"
+                  onClick={createCompTicket}
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: 14,
+                  borderRadius: 18,
+                  background:
+                    "linear-gradient(135deg, rgba(34,211,238,0.10) 0%, rgba(251,113,133,0.10) 100%)",
+                  border: "1px solid rgba(14,165,233,0.16)",
+                }}
+              >
                 <div
                   style={{
-                    marginTop: 4,
-                    color: "#64748B",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    letterSpacing: 1.1,
+                    color: "#0EA5E9",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Live Event Snapshot
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "grid",
+                    gap: 8,
+                    color: "#0F172A",
                     fontSize: 14,
                   }}
                 >
-                  Quick actions for live event operations.
+                  <div>
+                    • Peak check-ins are trending between 8:45 PM and 9:30 PM
+                  </div>
+                  <div>• VIP Express Entry is pacing fastest tonight</div>
+                  <div>• Refund/void activity is low and within normal range</div>
                 </div>
               </div>
+            </section>
+          </div>
 
-              <TogglePill
-                label="Door Mode"
-                active={doorMode}
-                onClick={() => {
-                  setDoorMode((v) => !v)
-                  showFlash(`Door mode ${!doorMode ? "enabled" : "disabled"}`)
-                }}
-              />
-            </div>
-
+          <section
+            style={{
+              background: "rgba(255,255,255,0.90)",
+              border: "1px solid rgba(148,163,184,0.16)",
+              borderRadius: 26,
+              boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
+              padding: 18,
+            }}
+          >
             <div
               style={{
-                display: "grid",
-                gap: 12,
+                fontSize: 20,
+                fontWeight: 900,
+                letterSpacing: -0.3,
+                marginBottom: 14,
               }}
             >
-              <ActionBlock
-                title="Manual Check-In"
-                subtitle="Mark a guest present if scanning fails."
-                buttonLabel="Enable"
-                onClick={() => showFlash("Manual check-in enabled")}
-              />
-              <ActionBlock
-                title="Resend Ticket"
-                subtitle="Quickly resend a pass to the guest."
-                buttonLabel="Send"
-                onClick={() => showFlash("Ticket resend started")}
-              />
-              <ActionBlock
-                title="Pause All Sales"
-                subtitle="Temporarily stop all online ticket purchases."
-                buttonLabel="Pause"
-                onClick={() => {
-                  setProducts((current) =>
-                    current.map((item) => ({ ...item, live: false }))
-                  )
-                  showFlash("All ticket sales paused")
-                }}
-              />
-              <ActionBlock
-                title="Export Entry List"
-                subtitle="Prepare a downloadable admissions list."
-                buttonLabel="Export"
-                onClick={() => showFlash("Entry list export prepared")}
-              />
+              Ticket Detail Panel
             </div>
 
-            <div
-              style={{
-                marginTop: 16,
-                padding: 14,
-                borderRadius: 18,
-                background:
-                  "linear-gradient(135deg, rgba(34,211,238,0.10) 0%, rgba(251,113,133,0.10) 100%)",
-                border: "1px solid rgba(14,165,233,0.16)",
-              }}
-            >
+            {selectedRecord ? (
               <div
                 style={{
-                  fontSize: 13,
-                  fontWeight: 900,
-                  letterSpacing: 1.1,
-                  color: "#0EA5E9",
-                  textTransform: "uppercase",
-                }}
-              >
-                Live Event Snapshot
-              </div>
-
-              <div
-                style={{
-                  marginTop: 10,
                   display: "grid",
-                  gap: 8,
-                  color: "#0F172A",
-                  fontSize: 14,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14,
                 }}
               >
-                <div>• Peak check-ins are trending between 8:45 PM and 9:30 PM</div>
-                <div>• VIP Express Entry is pacing fastest tonight</div>
-                <div>• Refund/void activity is low and within normal range</div>
+                <DetailCard label="Guest" value={selectedRecord.buyerName} />
+                <DetailCard label="Email" value={selectedRecord.email} />
+                <DetailCard label="Order ID" value={selectedRecord.orderId} />
+                <DetailCard
+                  label="Ticket Type"
+                  value={selectedRecord.ticketType}
+                />
+                <DetailCard
+                  label="Purchased"
+                  value={selectedRecord.purchasedAt}
+                />
+                <DetailCard
+                  label="Scanned"
+                  value={selectedRecord.scannedAt ?? "Not yet"}
+                />
+
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: 16,
+                    borderRadius: 18,
+                    border: "1px solid rgba(148,163,184,0.14)",
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.95) 100%)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        if (!doorMode) {
+                          showFlash("Enable Door Mode to check guests in")
+                          return
+                        }
+                        handleRecordAction(selectedRecord.id, "scan")
+                      }}
+                      style={actionButtonStyle(doorMode ? "primary" : "muted")}
+                    >
+                      Manual Check-In
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleRecordAction(selectedRecord.id, "activate")
+                      }
+                      style={actionButtonStyle("secondary")}
+                    >
+                      Reactivate
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleRecordAction(selectedRecord.id, "refund")
+                      }
+                      style={actionButtonStyle("warn")}
+                    >
+                      Refund
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleRecordAction(selectedRecord.id, "void")
+                      }
+                      style={actionButtonStyle("danger")}
+                    >
+                      Void
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleRecordAction(selectedRecord.id, "resend")
+                      }
+                      style={actionButtonStyle("muted")}
+                    >
+                      Resend Ticket
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div
+                style={{
+                  padding: "22px 16px",
+                  borderRadius: 18,
+                  border: "1px dashed rgba(148,163,184,0.28)",
+                  background: "rgba(248,250,252,0.72)",
+                  color: "#64748B",
+                  fontWeight: 700,
+                }}
+              >
+                No ticket selected yet.
+              </div>
+            )}
           </section>
         </div>
+      </div>
 
-        <section
+      {showAddTicketModal ? (
+        <div
+          onClick={closeAddTicketModal}
           style={{
-            background: "rgba(255,255,255,0.88)",
-            border: "1px solid rgba(148,163,184,0.16)",
-            borderRadius: 26,
-            boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
-            padding: 18,
-            overflow: "hidden",
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            background: "rgba(15,23,42,0.42)",
+            backdropFilter: "blur(8px)",
+            padding: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           <div
+            onClick={(e) => e.stopPropagation()}
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "center",
-              flexWrap: "wrap",
-              marginBottom: 14,
+              width: "100%",
+              maxWidth: 620,
+              maxHeight: "min(88dvh, 900px)",
+              overflowY: "auto",
+              borderRadius: 26,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+              border: "1px solid rgba(148,163,184,0.16)",
+              boxShadow: "0 30px 80px rgba(15,23,42,0.22)",
+              padding: 20,
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 900,
-                  letterSpacing: -0.3,
-                }}
-              >
-                Recent Ticket Activity
-              </div>
-              <div
-                style={{
-                  marginTop: 4,
-                  color: "#64748B",
-                  fontSize: 14,
-                }}
-              >
-                Search ticket holders, review status, and take action.
-              </div>
-            </div>
-
             <div
               style={{
                 display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "flex-start",
+                marginBottom: 18,
               }}
             >
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search buyer, order ID, email..."
-                style={{
-                  width: 280,
-                  maxWidth: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(148,163,184,0.22)",
-                  outline: "none",
-                  fontSize: 14,
-                  background: "#FFFFFF",
-                  color: "#0F172A",
-                }}
-              />
-
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as "All" | TicketStatus)
-                }
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(148,163,184,0.22)",
-                  outline: "none",
-                  fontSize: 14,
-                  background: "#FFFFFF",
-                  color: "#0F172A",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Scanned">Scanned</option>
-                <option value="Refunded">Refunded</option>
-                <option value="Voided">Voided</option>
-                <option value="Transferred">Transferred</option>
-              </select>
-            </div>
-          </div>
-
-          <div
-            style={{
-              overflowX: "auto",
-              borderRadius: 18,
-              border: "1px solid rgba(148,163,184,0.14)",
-            }}
-          >
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                minWidth: 980,
-                background: "#FFFFFF",
-              }}
-            >
-              <thead>
-                <tr
+              <div>
+                <div
                   style={{
-                    background:
-                      "linear-gradient(90deg, rgba(34,211,238,0.08) 0%, rgba(251,113,133,0.08) 100%)",
+                    fontSize: 24,
+                    fontWeight: 900,
+                    letterSpacing: -0.5,
+                    color: "#0F172A",
                   }}
                 >
-                  {[
-                    "Buyer",
-                    "Order ID",
-                    "Ticket",
-                    "Channel",
-                    "Status",
-                    "Purchased",
-                    "Scanned",
-                    "Actions",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      style={{
-                        textAlign: "left",
-                        padding: "14px 14px",
-                        fontSize: 12,
-                        color: "#475569",
-                        fontWeight: 900,
-                        letterSpacing: 1,
-                        textTransform: "uppercase",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+                  Add Ticket
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 14,
+                    color: "#64748B",
+                  }}
+                >
+                  Create a new ticket product for this session.
+                </div>
+              </div>
 
-              <tbody>
-                {filteredRecords.map((record) => {
-                  const statusStyle = statusColors(record.status)
+              <button
+                onClick={closeAddTicketModal}
+                style={{
+                  border: "1px solid rgba(148,163,184,0.18)",
+                  background: "rgba(255,255,255,0.88)",
+                  color: "#334155",
+                  width: 38,
+                  height: 38,
+                  borderRadius: 999,
+                  fontSize: 18,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+                aria-label="Close add ticket modal"
+              >
+                ×
+              </button>
+            </div>
 
-                  return (
-                    <tr
-                      key={record.id}
-                      onClick={() => setSelectedRecordId(record.id)}
-                      style={{
-                        borderTop: "1px solid rgba(148,163,184,0.10)",
-                        cursor: "pointer",
-                        background:
-                          selectedRecordId === record.id
-                            ? "rgba(14,165,233,0.04)"
-                            : "#FFFFFF",
-                      }}
-                    >
-                      <td style={cellStyle}>
-                        <div style={{ fontWeight: 800, color: "#0F172A" }}>
-                          {record.buyerName}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>
-                          {record.email}
-                        </div>
-                      </td>
-
-                      <td style={cellStyle}>{record.orderId}</td>
-                      <td style={cellStyle}>{record.ticketType}</td>
-                      <td style={cellStyle}>{record.channel}</td>
-
-                      <td style={cellStyle}>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "7px 10px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 800,
-                            background: statusStyle.bg,
-                            color: statusStyle.color,
-                            border: `1px solid ${statusStyle.border}`,
-                          }}
-                        >
-                          {record.status}
-                        </span>
-                      </td>
-
-                      <td style={cellStyle}>{record.purchasedAt}</td>
-                      <td style={cellStyle}>{record.scannedAt ?? "—"}</td>
-
-                      <td style={cellStyle}>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRecordAction(record.id, "scan")
-                            }}
-                            style={tinyActionStyle("#06B6D4")}
-                          >
-                            Check In
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRecordAction(record.id, "resend")
-                            }}
-                            style={tinyActionStyle("#FB7185")}
-                          >
-                            Resend
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-
-                {filteredRecords.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      style={{
-                        padding: "28px 18px",
-                        textAlign: "center",
-                        color: "#64748B",
-                        fontWeight: 700,
-                      }}
-                    >
-                      No ticket records match your current filters.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section
-          style={{
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(148,163,184,0.16)",
-            borderRadius: 26,
-            boxShadow: "0 20px 50px rgba(15,23,42,0.06)",
-            padding: 18,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 900,
-              letterSpacing: -0.3,
-              marginBottom: 6,
-            }}
-          >
-            Ticket Detail Panel
-          </div>
-          <div
-            style={{
-              color: "#64748B",
-              fontSize: 14,
-              marginBottom: 14,
-            }}
-          >
-            Select a ticket row above to inspect and resolve guest issues.
-          </div>
-
-          {selectedRecord ? (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: 14,
               }}
             >
-              <DetailCard label="Guest" value={selectedRecord.buyerName} />
-              <DetailCard label="Email" value={selectedRecord.email} />
-              <DetailCard label="Order ID" value={selectedRecord.orderId} />
-              <DetailCard label="Ticket Type" value={selectedRecord.ticketType} />
-              <DetailCard label="Purchased" value={selectedRecord.purchasedAt} />
-              <DetailCard label="Scanned" value={selectedRecord.scannedAt ?? "Not yet"} />
+              <FieldLabel label="Ticket Name" />
+              <input
+                value={ticketForm.name}
+                onChange={(e) =>
+                  setTicketForm((current) => ({
+                    ...current,
+                    name: e.target.value,
+                  }))
+                }
+                placeholder="Enter ticket name"
+                style={inputStyle}
+              />
 
               <div
                 style={{
-                  gridColumn: "1 / -1",
-                  padding: 16,
-                  borderRadius: 18,
-                  border: "1px solid rgba(148,163,184,0.14)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.95) 100%)",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14,
                 }}
               >
+                <div>
+                  <FieldLabel label="Price Type" />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {(["Free", "Paid"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setTicketForm((current) => ({
+                            ...current,
+                            priceType: option,
+                            price: option === "Free" ? "" : current.price,
+                          }))
+                        }
+                        style={pillButtonStyle(ticketForm.priceType === option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <FieldLabel label="Price" />
+                  <input
+                    value={ticketForm.priceType === "Free" ? "Free" : ticketForm.price}
+                    onChange={(e) =>
+                      setTicketForm((current) => ({
+                        ...current,
+                        price: e.target.value.replace(/[^\d.]/g, ""),
+                      }))
+                    }
+                    disabled={ticketForm.priceType === "Free"}
+                    placeholder={ticketForm.priceType === "Free" ? "Free" : "0.00"}
+                    style={{
+                      ...inputStyle,
+                      opacity: ticketForm.priceType === "Free" ? 0.7 : 1,
+                      cursor:
+                        ticketForm.priceType === "Free" ? "not-allowed" : "text",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel label="Category" />
                 <div
                   style={{
                     display: "flex",
@@ -1185,120 +1440,276 @@ export default function AdminTicketsPage() {
                     flexWrap: "wrap",
                   }}
                 >
-                  <button
-                    onClick={() => handleRecordAction(selectedRecord.id, "scan")}
-                    style={actionButtonStyle("primary")}
-                  >
-                    Manual Check-In
-                  </button>
-                  <button
-                    onClick={() => handleRecordAction(selectedRecord.id, "activate")}
-                    style={actionButtonStyle("secondary")}
-                  >
-                    Reactivate
-                  </button>
-                  <button
-                    onClick={() => handleRecordAction(selectedRecord.id, "refund")}
-                    style={actionButtonStyle("warn")}
-                  >
-                    Refund
-                  </button>
-                  <button
-                    onClick={() => handleRecordAction(selectedRecord.id, "void")}
-                    style={actionButtonStyle("danger")}
-                  >
-                    Void
-                  </button>
-                  <button
-                    onClick={() => handleRecordAction(selectedRecord.id, "resend")}
-                    style={actionButtonStyle("muted")}
-                  >
-                    Resend Ticket
-                  </button>
+                  {(["Early Bird", "Late Bird", "GA", "VIP"] as const).map(
+                    (option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setTicketForm((current) => ({
+                            ...current,
+                            category: option,
+                          }))
+                        }
+                        style={pillButtonStyle(ticketForm.category === option)}
+                      >
+                        {option}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <div>
+                  <FieldLabel label="Quantity" />
+                  <input
+                    value={ticketForm.quantity}
+                    onChange={(e) =>
+                      setTicketForm((current) => ({
+                        ...current,
+                        quantity: e.target.value.replace(/[^\d]/g, ""),
+                      }))
+                    }
+                    placeholder="Enter quantity"
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel label="Status" />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {(["Live", "Paused"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setTicketForm((current) => ({
+                            ...current,
+                            status: option,
+                          }))
+                        }
+                        style={pillButtonStyle(ticketForm.status === option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel label="Sale Window" />
+                <select
+                  value={ticketForm.saleWindow}
+                  onChange={(e) =>
+                    setTicketForm((current) => ({
+                      ...current,
+                      saleWindow: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="Now - 11:30 PM">Now - 11:30 PM</option>
+                  <option value="Now - 12:00 AM">Now - 12:00 AM</option>
+                  <option value="Now - Event End">Now - Event End</option>
+                  <option value="Closed">Closed</option>
+                </select>
+              </div>
+
+              {ticketFormError ? (
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    background: "rgba(239,68,68,0.10)",
+                    border: "1px solid rgba(239,68,68,0.18)",
+                    color: "#991B1B",
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  {ticketFormError}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginTop: 6,
+                }}
+              >
+                <button
+                  onClick={closeAddTicketModal}
+                  style={actionButtonStyle("muted")}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveNewTicket}
+                  style={actionButtonStyle("primary")}
+                >
+                  Save Ticket
+                </button>
+              </div>
             </div>
-          ) : (
+          </div>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+function SingleDonut({
+  value,
+  total,
+  percentage,
+  centerLabel,
+}: {
+  value: number
+  total: number
+  percentage: number
+  centerLabel: string
+}) {
+  const safeTotal = Math.max(total, 1)
+  const pct = Math.max(0, Math.min(value / safeTotal, 1))
+  const angle = pct * 360
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 160,
+          height: 160,
+          maxWidth: "100%",
+          borderRadius: "50%",
+          background: `conic-gradient(#22D3EE 0deg, #38BDF8 ${angle * 0.58}deg, #FB7185 ${angle}deg, rgba(226,232,240,0.95) ${angle}deg, rgba(226,232,240,0.95) 360deg)`,
+          display: "grid",
+          placeItems: "center",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            width: 102,
+            height: 102,
+            borderRadius: "50%",
+            background: "#FFFFFF",
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "inset 0 0 0 1px rgba(148,163,184,0.10)",
+            padding: 8,
+          }}
+        >
+          <div style={{ textAlign: "center", minWidth: 0 }}>
             <div
               style={{
-                padding: "22px 16px",
-                borderRadius: 18,
-                border: "1px dashed rgba(148,163,184,0.28)",
-                background: "rgba(248,250,252,0.72)",
-                color: "#64748B",
-                fontWeight: 700,
+                fontSize: 30,
+                lineHeight: 1,
+                fontWeight: 900,
+                letterSpacing: -0.8,
+                color: "#0F172A",
               }}
             >
-              No ticket selected yet.
+              {value}
             </div>
-          )}
-        </section>
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: 11,
+                fontWeight: 900,
+                color: "#64748B",
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+              }}
+            >
+              {centerLabel}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                fontWeight: 800,
+                color: "#0EA5E9",
+              }}
+            >
+              {Math.round(percentage)}%
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function MetricCard({
-  title,
+function LegendDot({
+  label,
+  color,
   value,
-  subtext,
-  accent,
 }: {
-  title: string
-  value: string
-  subtext: string
-  accent: "cyan" | "sky" | "orange" | "pink"
+  label: string
+  color: string
+  value: number
 }) {
-  const backgrounds = {
-    cyan: "linear-gradient(135deg, rgba(34,211,238,0.18) 0%, rgba(255,255,255,0.94) 100%)",
-    sky: "linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(255,255,255,0.94) 100%)",
-    orange: "linear-gradient(135deg, rgba(251,146,60,0.18) 0%, rgba(255,255,255,0.94) 100%)",
-    pink: "linear-gradient(135deg, rgba(251,113,133,0.18) 0%, rgba(255,255,255,0.94) 100%)",
-  } as const
-
   return (
     <div
       style={{
-        borderRadius: 24,
-        padding: 18,
-        background: backgrounds[accent],
-        border: "1px solid rgba(148,163,184,0.16)",
-        boxShadow: "0 18px 40px rgba(15,23,42,0.05)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        minWidth: 0,
       }}
     >
-      <div
+      <span
         style={{
-          fontSize: 12,
-          fontWeight: 900,
-          letterSpacing: 1.1,
-          textTransform: "uppercase",
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: color,
+          flexShrink: 0,
+        }}
+      />
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
           color: "#475569",
+          whiteSpace: "nowrap",
         }}
       >
-        {title}
-      </div>
-      <div
+        {label}
+      </span>
+      <span
         style={{
-          marginTop: 10,
-          fontSize: 34,
-          lineHeight: 1,
+          fontSize: 13,
           fontWeight: 900,
-          letterSpacing: -1,
           color: "#0F172A",
+          whiteSpace: "nowrap",
         }}
       >
         {value}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          color: "#64748B",
-          fontSize: 14,
-          lineHeight: 1.5,
-        }}
-      >
-        {subtext}
-      </div>
+      </span>
     </div>
   )
 }
@@ -1311,15 +1722,19 @@ function MiniStat({ label, value }: { label: string; value: string }) {
         borderRadius: 16,
         background: "rgba(248,250,252,0.95)",
         border: "1px solid rgba(148,163,184,0.12)",
+        minWidth: 0,
       }}
     >
       <div
         style={{
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 800,
-          letterSpacing: 0.8,
+          letterSpacing: 0.7,
           color: "#64748B",
           textTransform: "uppercase",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
       >
         {label}
@@ -1330,6 +1745,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
           fontSize: 20,
           fontWeight: 900,
           color: "#0F172A",
+          lineHeight: 1.05,
         }}
       >
         {value}
@@ -1440,11 +1856,13 @@ function ActionBlock({
   subtitle,
   buttonLabel,
   onClick,
+  disabled = false,
 }: {
   title: string
   subtitle: string
   buttonLabel: string
   onClick: () => void
+  disabled?: boolean
 }) {
   return (
     <div
@@ -1483,9 +1901,29 @@ function ActionBlock({
         </div>
       </div>
 
-      <button onClick={onClick} style={actionButtonStyle("secondary")}>
+      <button
+        onClick={onClick}
+        style={actionButtonStyle(disabled ? "muted" : "secondary")}
+      >
         {buttonLabel}
       </button>
+    </div>
+  )
+}
+
+function FieldLabel({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        fontWeight: 900,
+        letterSpacing: 1,
+        textTransform: "uppercase",
+        color: "#64748B",
+        marginBottom: 8,
+      }}
+    >
+      {label}
     </div>
   )
 }
@@ -1533,18 +1971,46 @@ function actionButtonStyle(
   } as const
 }
 
-function tinyActionStyle(color: string) {
+function pillButtonStyle(active: boolean) {
   return {
-    border: "none",
-    background: `${color}14`,
-    color,
-    padding: "8px 10px",
-    borderRadius: 10,
-    fontSize: 12,
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: active
+      ? "1px solid rgba(14,165,233,0.26)"
+      : "1px solid rgba(148,163,184,0.18)",
+    background: active ? "rgba(14,165,233,0.10)" : "rgba(255,255,255,0.88)",
+    color: active ? "#075985" : "#334155",
+    fontSize: 13,
     fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
   }
+}
+
+function tinyActionStyle(color: string, disabled = false) {
+  return {
+    border: "none",
+    background: disabled ? "rgba(148,163,184,0.10)" : `${color}14`,
+    color: disabled ? "#94A3B8" : color,
+    padding: "8px 10px",
+    borderRadius: 10,
+    fontSize: 12,
+    fontWeight: 800,
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace: "nowrap" as const,
+  }
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(148,163,184,0.22)",
+  outline: "none",
+  fontSize: 14,
+  background: "#FFFFFF",
+  color: "#0F172A",
+  boxSizing: "border-box",
 }
 
 const cellStyle: React.CSSProperties = {
