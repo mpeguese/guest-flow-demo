@@ -47,8 +47,8 @@ export default function EchoFilterTabs({
                 : "rgba(255,255,255,0.8)",
               color: activeFilter ? "#FFFFFF" : "#0F172A",
               boxShadow: activeFilter
-                ? "0 12px 26px rgba(14,165,233,0.22)"
-                : "0 8px 20px rgba(15,23,42,0.06)",
+                ? "0 12px 26px rgba(14,165,233,0.11)"
+                : "0 8px 20px rgba(15,23,42,0.05)",
               fontSize: 13,
               fontWeight: 800,
               letterSpacing: 0.2,

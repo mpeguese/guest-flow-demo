@@ -1,4 +1,3 @@
-//app/components/echo/EchoHeader.tsx
 "use client"
 
 function ChevronLeftIcon() {
@@ -42,6 +41,8 @@ function CloseIcon() {
 
 type EchoHeaderProps = {
   postCount: number
+  liveLabel: string
+  moodWords: string[]
   onBack: () => void
   showIntro: boolean
   onDismissIntro: () => void
@@ -49,6 +50,8 @@ type EchoHeaderProps = {
 
 export default function EchoHeader({
   postCount,
+  liveLabel,
+  moodWords,
   onBack,
   showIntro,
   onDismissIntro,
@@ -58,7 +61,7 @@ export default function EchoHeader({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: 16,
+        gap: 14,
       }}
     >
       <div
@@ -76,10 +79,11 @@ export default function EchoHeader({
             width: 44,
             height: 44,
             borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.72)",
-            background: "rgba(255,255,255,0.76)",
+            border: "1px solid rgba(255,255,255,0.84)",
+            background: "rgba(255,255,255,0.72)",
             backdropFilter: "blur(14px)",
-            boxShadow: "0 12px 26px rgba(15,23,42,0.07)",
+            WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 12px 26px rgba(15,23,42,0.06)",
             color: "#0F172A",
             display: "flex",
             alignItems: "center",
@@ -93,20 +97,34 @@ export default function EchoHeader({
 
         <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
             padding: "10px 14px",
-            borderRadius: 18,
+            borderRadius: 999,
             background: "rgba(255,255,255,0.72)",
             backdropFilter: "blur(14px)",
-            boxShadow: "0 12px 26px rgba(15,23,42,0.07)",
-            border: "1px solid rgba(255,255,255,0.7)",
+            WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 12px 26px rgba(15,23,42,0.06)",
+            border: "1px solid rgba(255,255,255,0.84)",
             color: "#0F172A",
             fontSize: 12,
-            fontWeight: 800,
+            fontWeight: 900,
             whiteSpace: "nowrap",
             flex: "0 0 auto",
           }}
         >
-          {postCount} live updates
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 999,
+              background: "#22C55E",
+              boxShadow: "0 0 12px rgba(34,197,94,0.44)",
+              flex: "0 0 auto",
+            }}
+          />
+          {liveLabel}
         </div>
       </div>
 
@@ -120,7 +138,7 @@ export default function EchoHeader({
       >
         <div
           style={{
-            fontSize: 31,
+            fontSize: 32,
             fontWeight: 900,
             letterSpacing: -0.8,
             lineHeight: 1,
@@ -134,11 +152,11 @@ export default function EchoHeader({
           style={{
             marginTop: 10,
             fontSize: 14,
-            fontWeight: 700,
-            color: "rgba(15,23,42,0.66)",
+            fontWeight: 800,
+            color: "rgba(15,23,42,0.64)",
           }}
         >
-          LIV Saturday
+          {postCount} voices in the room
         </div>
       </div>
 
@@ -147,12 +165,13 @@ export default function EchoHeader({
           className="echo-intro-fade-in"
           style={{
             position: "relative",
-            padding: 16,
+            padding: "16px 18px",
             borderRadius: 24,
-            background: "rgba(255,255,255,0.78)",
-            border: "1px solid rgba(255,255,255,0.76)",
-            boxShadow: "0 14px 28px rgba(15,23,42,0.06)",
+            background: "rgba(255,255,255,0.72)",
+            border: "1px solid rgba(255,255,255,0.84)",
+            boxShadow: "0 14px 28px rgba(15,23,42,0.05)",
             backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
           }}
         >
           <button
@@ -166,7 +185,7 @@ export default function EchoHeader({
               height: 30,
               borderRadius: 999,
               border: "none",
-              background: "rgba(241,245,249,0.92)",
+              background: "rgba(241,245,249,0.95)",
               color: "rgba(15,23,42,0.62)",
               display: "flex",
               alignItems: "center",
@@ -186,21 +205,20 @@ export default function EchoHeader({
               paddingRight: 40,
             }}
           >
-            The live voice of the room
+            A live field of moments
           </div>
 
           <div
             style={{
               marginTop: 8,
               fontSize: 14,
-              lineHeight: 1.5,
+              lineHeight: 1.45,
               color: "rgba(15,23,42,0.72)",
               fontWeight: 700,
               paddingRight: 10,
             }}
           >
-            Live takes from guests who are here, just left, or already booked in. See the
-            energy before you pull up and join the conversation.
+            Tap into what guests are feeling right now. The hottest echoes float forward.
           </div>
         </div>
       ) : null}
@@ -212,18 +230,28 @@ export default function EchoHeader({
           justifyContent: "center",
           rowGap: 6,
           columnGap: 10,
-          color: "rgba(15,23,42,0.58)",
+          color: "rgba(15,23,42,0.56)",
           fontSize: 12,
           fontWeight: 800,
           letterSpacing: 0.2,
           textAlign: "center",
         }}
       >
-        <span>Packed Tonight</span>
-        <span style={{ color: "rgba(15,23,42,0.28)" }}>•</span>
-        <span>Music Up</span>
-        <span style={{ color: "rgba(15,23,42,0.28)" }}>•</span>
-        <span>Worth Pulling Up</span>
+        {moodWords.map((word, index) => (
+          <div
+            key={`${word}-${index}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            {index > 0 ? (
+              <span style={{ color: "rgba(15,23,42,0.24)" }}>•</span>
+            ) : null}
+            <span>{word}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

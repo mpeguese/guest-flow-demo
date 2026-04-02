@@ -2,48 +2,36 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import EchoPostCard, { type EchoPost } from "../components/echo/EchoPostCard"
 import EchoHeader from "../components/echo/EchoHeader"
-import EchoThreadSheet from "../components/echo/EchoThreadSheet"
 import EchoComposer from "../components/echo/EchoComposer"
-import EchoFilterTabs, { type EchoFilter,} from "../components/echo/EchoFilterTabs"
+import EchoFilterTabs, { type EchoFilter } from "../components/echo/EchoFilterTabs"
 import EchoAvatarModal from "../components/echo/EchoAvatarModal"
-
+import EchoFloatingField from "../components/echo/EchoFloatingField"
+import EchoMomentSheet from "../components/echo/EchoMomentSheet"
 
 type EchoBadge = "Here Now" | "Attended" | "Booked Table" | "VIP"
 
-type EchoReply = {
+export type EchoReply = {
   id: string
   author: string
   text: string
   minutesAgo: number
 }
 
-const POST_LIMIT = 140
-const REPLY_LIMIT = 120
+export type EchoPost = {
+  id: string
+  author: string
+  text: string
+  badge: EchoBadge
+  tags: string[]
+  minutesAgo: number
+  replyCount: number
+  popularity: number
+  replies: EchoReply[]
+  avatarUrl?: string
+}
 
-// const BADGE_STYLES: Record<EchoBadge, { bg: string; color: string; border: string }> = {
-//   "Here Now": {
-//     bg: "rgba(16, 185, 129, 0.12)",
-//     color: "#047857",
-//     border: "rgba(16, 185, 129, 0.2)",
-//   },
-//   Attended: {
-//     bg: "rgba(59, 130, 246, 0.11)",
-//     color: "#1D4ED8",
-//     border: "rgba(59, 130, 246, 0.18)",
-//   },
-//   "Booked Table": {
-//     bg: "rgba(245, 158, 11, 0.13)",
-//     color: "#B45309",
-//     border: "rgba(245, 158, 11, 0.2)",
-//   },
-//   VIP: {
-//     bg: "rgba(168, 85, 247, 0.11)",
-//     color: "#7C3AED",
-//     border: "rgba(168, 85, 247, 0.18)",
-//   },
-// }
+const POST_LIMIT = 140
 
 const TAG_OPTIONS = [
   "Packed",
@@ -133,32 +121,32 @@ const INITIAL_POSTS: EchoPost[] = [
       { id: "r12", author: "Leo", text: "Helpful.", minutesAgo: 28 },
     ],
   },
+  {
+    id: "p6",
+    author: "Chris V.",
+    avatarUrl: "/images/avatars/andre.jpg",
+    text: "VIP finally started feeling active. Better energy than it looked from the door.",
+    badge: "VIP",
+    tags: ["VIP Crowd", "Worth It"],
+    minutesAgo: 9,
+    replyCount: 2,
+    popularity: 88,
+    replies: [
+      { id: "r13", author: "Nia", text: "That is the update I needed.", minutesAgo: 6 },
+      { id: "r14", author: "Chris V.", text: "Yeah it turned a corner.", minutesAgo: 4 },
+    ],
+  },
 ]
-
-// function formatMinutesAgo(minutesAgo: number) {
-//   if (minutesAgo < 1) return "now"
-//   if (minutesAgo < 60) return `${minutesAgo}m`
-//   const hours = Math.floor(minutesAgo / 60)
-//   return `${hours}h`
-// }
-
-// function getInitials(name: string) {
-//   return name
-//     .split(" ")
-//     .map((part) => part[0])
-//     .join("")
-//     .slice(0, 2)
-//     .toUpperCase()
-// }
 
 function sortPosts(posts: EchoPost[], filter: EchoFilter) {
   if (filter === "hereNow") {
-    return [...posts].sort((a, b) => {
-      const aScore = a.badge === "Here Now" ? 1 : 0
-      const bScore = b.badge === "Here Now" ? 1 : 0
-      if (aScore !== bScore) return bScore - aScore
-      return a.minutesAgo - b.minutesAgo
-    })
+    const hereNowPosts = posts.filter((post) => post.badge === "Here Now")
+    const otherPosts = posts.filter((post) => post.badge !== "Here Now")
+
+    return [
+      ...hereNowPosts.sort((a, b) => a.minutesAgo - b.minutesAgo),
+      ...otherPosts.sort((a, b) => a.minutesAgo - b.minutesAgo),
+    ]
   }
 
   if (filter === "popular") {
@@ -168,61 +156,34 @@ function sortPosts(posts: EchoPost[], filter: EchoFilter) {
   return [...posts].sort((a, b) => a.minutesAgo - b.minutesAgo)
 }
 
-// function EchoBadgePill({ badge }: { badge: EchoBadge }) {
-//   const style = BADGE_STYLES[badge]
+function getLiveMomentsLabel(posts: EchoPost[]) {
+  const activeCount = posts.filter((post) => post.minutesAgo <= 15).length
+  return activeCount > 0 ? `${activeCount} live` : `${posts.length} echoes`
+}
 
-//   return (
-//     <div
-//       style={{
-//         display: "inline-flex",
-//         alignItems: "center",
-//         gap: 6,
-//         padding: "6px 10px",
-//         borderRadius: 999,
-//         background: style.bg,
-//         color: style.color,
-//         border: `1px solid ${style.border}`,
-//         fontSize: 12,
-//         fontWeight: 800,
-//         letterSpacing: 0.2,
-//         whiteSpace: "nowrap",
-//       }}
-//     >
-//       <span
-//         style={{
-//           width: 6,
-//           height: 6,
-//           borderRadius: 999,
-//           background: style.color,
-//           flex: "0 0 auto",
-//         }}
-//       />
-//       {badge}
-//     </div>
-//   )
-// }
+function getMoodLine(posts: EchoPost[]) {
+  const popular = [...posts].sort((a, b) => b.popularity - a.popularity).slice(0, 3)
+  const tags = popular.flatMap((post) => post.tags).filter(Boolean)
+  const unique = Array.from(new Set(tags)).slice(0, 3)
 
+  if (unique.length === 0) {
+    return ["Live Now", "Good Energy", "Worth Pulling Up"]
+  }
+
+  return unique
+}
 
 export default function EchoClient() {
   const [filter, setFilter] = useState<EchoFilter>("latest")
   const [posts, setPosts] = useState<EchoPost[]>(INITIAL_POSTS)
   const [composerOpen, setComposerOpen] = useState(false)
-  const [threadOpen, setThreadOpen] = useState(false)
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(true)
   const [selectedAvatarPost, setSelectedAvatarPost] = useState<EchoPost | null>(null)
+  const [selectedMoment, setSelectedMoment] = useState<EchoPost | null>(null)
 
   const filteredPosts = useMemo(() => sortPosts(posts, filter), [posts, filter])
-
-  const selectedPost = useMemo(
-    () => posts.find((post) => post.id === selectedPostId) ?? null,
-    [posts, selectedPostId]
-  )
-
-  const openThread = (post: EchoPost) => {
-    setSelectedPostId(post.id)
-    setThreadOpen(true)
-  }
+  const moodLine = useMemo(() => getMoodLine(posts), [posts])
+  const liveMomentsLabel = useMemo(() => getLiveMomentsLabel(posts), [posts])
 
   const handleCreatePost = (payload: { text: string; badge: EchoBadge; tags: string[] }) => {
     const newPost: EchoPost = {
@@ -243,27 +204,6 @@ export default function EchoClient() {
     ])
   }
 
-  const handleReply = (postId: string, text: string) => {
-    const newReply: EchoReply = {
-      id: `reply-${Date.now()}`,
-      author: "You",
-      text,
-      minutesAgo: 0,
-    }
-
-    setPosts((current) =>
-      current.map((post) => {
-        if (post.id !== postId) return post
-        return {
-          ...post,
-          replyCount: post.replyCount + 1,
-          popularity: post.popularity + 2,
-          replies: [...post.replies, newReply],
-        }
-      })
-    )
-  }
-
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       window.history.back()
@@ -276,8 +216,13 @@ export default function EchoClient() {
     <div
       style={{
         minHeight: "100dvh",
+        height: "100dvh",
+        position: "relative",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
         background:
-          "linear-gradient(180deg, #FFFFFF 0%, #F5FBFF 38%, #EEFDF8 72%, #FFF6EC 100%)",
+          "linear-gradient(180deg, #FFFFFF 0%, #F4FBFF 32%, #F1FDFA 68%, #FFF7EE 100%)",
         color: "#0F172A",
       }}
     >
@@ -307,65 +252,70 @@ export default function EchoClient() {
 
       <div
         style={{
-          maxWidth: 560,
+          position: "relative",
+          zIndex: 2,
+          maxWidth: 720,
+          width: "100%",
           margin: "0 auto",
-          padding: "calc(22px + env(safe-area-inset-top)) 16px 120px",
+          padding: "calc(18px + env(safe-area-inset-top)) 14px 0",
           boxSizing: "border-box",
+          flex: "0 0 auto",
         }}
       >
         <EchoHeader
           postCount={posts.length}
+          liveLabel={liveMomentsLabel}
+          moodWords={moodLine}
           onBack={handleBack}
           showIntro={showIntro}
           onDismissIntro={() => setShowIntro(false)}
         />
 
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 14 }}>
           <EchoFilterTabs active={filter} onChange={setFilter} />
         </div>
+      </div>
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        <EchoFloatingField
+          posts={filteredPosts}
+          onOpenPost={(post) => setSelectedMoment(post)}
+          onOpenAvatar={(post) => {
+            if (!post.avatarUrl) return
+            setSelectedAvatarPost(post)
           }}
-        >
-          {filteredPosts.map((post) => (
-            <EchoPostCard
-                key={post.id}
-                post={post}
-                onOpenThread={openThread}
-                onOpenAvatar={(post) => {
-                if (!post.avatarUrl) return
-                setSelectedAvatarPost(post)
-                }}
-            />
-            ))}
-        </div>
+        />
       </div>
 
       <button
         onClick={() => setComposerOpen(true)}
         style={{
           position: "fixed",
-          right: 18,
-          bottom: "calc(18px + env(safe-area-inset-bottom))",
+          left: "50%",
+          marginBottom: 40,
+          transform: "translateX(-50%)",
+          bottom: "calc(16px + env(safe-area-inset-bottom))",
           border: "none",
           cursor: "pointer",
           borderRadius: 999,
-          padding: "16px 20px",
+          padding: "16px 22px",
           background: "linear-gradient(135deg, #0EA5E9 0%, #22C55E 100%)",
           color: "#FFFFFF",
           fontSize: 14,
           fontWeight: 900,
           letterSpacing: 0.2,
-          boxShadow: "0 18px 36px rgba(14,165,233,0.28)",
+          boxShadow: "0 18px 36px rgba(14,165,233,0.24)",
           zIndex: 20,
+          whiteSpace: "nowrap",
         }}
       >
-        Share the vibe
+        Drop an Echo
       </button>
 
       <EchoComposer
@@ -376,11 +326,13 @@ export default function EchoClient() {
         tagOptions={TAG_OPTIONS}
       />
 
-      <EchoThreadSheet
-        open={threadOpen}
-        post={selectedPost}
-        onClose={() => setThreadOpen(false)}
-        onReply={handleReply}
+      <EchoMomentSheet
+        post={selectedMoment}
+        onClose={() => setSelectedMoment(null)}
+        onOpenAvatar={(post) => {
+          if (!post.avatarUrl) return
+          setSelectedAvatarPost(post)
+        }}
       />
 
       <EchoAvatarModal
