@@ -1,4 +1,5 @@
 // app/lib/reservation-confirmation.ts
+"use client"
 
 export type ReservationGuestInfo = {
   firstName?: string
@@ -23,6 +24,11 @@ export type ReservationLineItem = {
   price: number
   imageSrc?: string
   qrCode?: string
+
+  // reservation hold / confirmation metadata
+  reservationId?: string
+  holdToken?: string
+  expiresAt?: string
 }
 
 export type ReservationRecord = {
@@ -67,7 +73,6 @@ export function buildItemQrCode(itemId: string, itemType: ReservationItemType) {
   }
 
   const prefix = itemType === "pass" ? "GF-PASS" : "GF-RES"
-  //return `${prefix}-${suffix}-${itemId.slice(-4).toUpperCase()}`
   const safeTail = itemId.replace(/[^A-Za-z0-9]/g, "").slice(-4).toUpperCase() || "0000"
   return `${prefix}-${suffix}-${safeTail}`
 }
@@ -86,6 +91,9 @@ export function normalizeReservationItem(item: ReservationLineItem): Reservation
     productId,
     partySize: String(item.partySize ?? ""),
     qrCode: item.qrCode || buildItemQrCode(item.id, itemType),
+    reservationId: item.reservationId || undefined,
+    holdToken: item.holdToken || undefined,
+    expiresAt: item.expiresAt || undefined,
   }
 }
 

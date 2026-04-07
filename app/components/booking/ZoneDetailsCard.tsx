@@ -1,4 +1,4 @@
-// app/component/booking/ZoneDetailsCard.tsx
+// app/components/booking/ZoneDetailsCard.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -61,12 +61,16 @@ export default function ZoneDetailsCard({
   isOpen,
   onClose,
   onContinue,
+  previewImageSrc,
+  previewImageAlt,
 }: {
   zone?: VenueZone
   status?: ZoneStatus
   isOpen: boolean
   onClose: () => void
   onContinue: () => void
+  previewImageSrc?: string
+  previewImageAlt?: string
 }) {
   const [shouldRender, setShouldRender] = useState(isOpen)
   const [isVisible, setIsVisible] = useState(false)
@@ -100,7 +104,9 @@ export default function ZoneDetailsCard({
   if (!shouldRender || !zone) return null
 
   const isBlocked = status === "booked"
-  const previewImageSrc = "/images/table-preview.jpg"
+  const resolvedPreviewImageSrc = previewImageSrc || "/images/table-preview.jpg"
+  const resolvedPreviewImageAlt =
+    previewImageAlt || `${zone.name} seating preview`
 
   return (
     <>
@@ -266,8 +272,8 @@ export default function ZoneDetailsCard({
               }}
             >
               <img
-                src={previewImageSrc}
-                alt={`${zone.name} seating preview`}
+                src={resolvedPreviewImageSrc}
+                alt={resolvedPreviewImageAlt}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -463,14 +469,14 @@ export default function ZoneDetailsCard({
                 background: isBlocked
                   ? COLORS.bgSoft
                   : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
-                color: isBlocked ? COLORS.textMuted : "#FFFFFF",
+                color: isBlocked ? COLORS.textMuted : "#fff",
                 fontSize: 15,
                 fontWeight: 900,
                 cursor: isBlocked ? "not-allowed" : "pointer",
-                boxShadow: isBlocked ? "none" : "0 14px 24px rgba(14,165,233,0.22)",
+                boxShadow: isBlocked ? "none" : "0 14px 24px rgba(14,165,233,0.20)",
               }}
             >
-              {isBlocked ? "This Area Is Unavailable" : "Continue with This Area"}
+              {isBlocked ? "Unavailable" : "Continue"}
             </button>
           </div>
         </div>

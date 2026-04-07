@@ -8,7 +8,6 @@ import MobileShell from "@/app/components/booking/MobileShell"
 import { BookingCartItem, useBookingCart } from "@/app/lib/booking-cart"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
 import {
-  generateReservationCode,
   getLatestReservation,
   saveLatestReservation,
   updateLatestReservationGuestInfo,
@@ -136,6 +135,10 @@ export default function ConfirmationClient() {
   const [activePassIndex, setActivePassIndex] = useState(0)
   const [hydrated, setHydrated] = useState(false)
   const [hasSuccessfulReturn, setHasSuccessfulReturn] = useState(false)
+  const [paymentIntentId, setPaymentIntentId] = useState("")
+  const [redirectStatus, setRedirectStatus] = useState("")
+  const [confirmationError, setConfirmationError] = useState("")
+  const [isConfirming, setIsConfirming] = useState(false)
 
   const didInitializeRef = useRef(false)
   const touchStartXRef = useRef<number | null>(null)
@@ -146,94 +149,147 @@ export default function ConfirmationClient() {
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search)
-      const paymentIntent = params.get("payment_intent")
-      const redirectStatus = params.get("redirect_status")
-      setHasSuccessfulReturn(!!paymentIntent || redirectStatus === "succeeded")
+      const paymentIntent = params.get("payment_intent") || ""
+      const status = params.get("redirect_status") || ""
+      setPaymentIntentId(paymentIntent)
+      setRedirectStatus(status)
+      setHasSuccessfulReturn(!!paymentIntent || status === "succeeded")
     }
   }, [])
 
   useEffect(() => {
     if (!hydrated || didInitializeRef.current) return
 
-    const existing = getLatestReservation()
+    async function initializeConfirmation() {
+      const existing = getLatestReservation()
 
-    if (hasSuccessfulReturn && items.length > 0) {
-      const newCode = generateReservationCode()
-      const now = new Date().toISOString()
+      if (hasSuccessfulReturn && items.length > 0) {
+        try {
+          setConfirmationError("")
+          setIsConfirming(true)
 
-      const normalizedItems = items.map((item, index) =>
-        normalizeReservationItem({
-          id: item.id,
-          itemType: item.itemType,
-          productId: item.productId,
-          zoneId: item.zoneId,
-          zoneName: item.zoneName,
-          section: item.section,
-          date: item.date,
-          partySize: item.partySize,
-          session: item.session,
-          price: item.price,
-          imageSrc: item.imageSrc,
-          qrCode: buildItemQrCode(
-            `${item.id}-${index}`,
-            item.itemType === "pass" ? "pass" : "zone"
-          ),
-        })
-      ) as CompletedItem[]
+          const confirmResponse = await fetch("/api/reservations/confirm", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              paymentIntent: paymentIntentId || null,
+              redirectStatus: redirectStatus || null,
+              items: items.map((item) => ({
+                id: item.id,
+                itemType: item.itemType,
+                zoneId: item.zoneId,
+                zoneName: item.zoneName,
+                section: item.section,
+                date: item.date,
+                partySize: item.partySize,
+                session: item.session,
+                price: item.price,
+                reservationId: item.reservationId,
+                holdToken: item.holdToken,
+                expiresAt: item.expiresAt,
+              })),
+            }),
+          })
 
-      const subtotal = normalizedItems.reduce((sum, item) => sum + item.price, 0)
-      const pricing = calculateBookingPricing(subtotal)
+          const confirmData = await confirmResponse.json().catch(() => null)
 
-      saveLatestReservation({
-        reservationCode: newCode,
-        createdAt: now,
-        subtotal: pricing.subtotal,
-        tax: pricing.tax,
-        processingFee: pricing.processingFee,
-        total: pricing.total,
-        items: normalizedItems.map((item) => ({
-          id: item.id,
-          itemType: item.itemType,
-          productId: item.productId,
-          zoneId: item.zoneId,
-          zoneName: item.zoneName,
-          section: item.section,
-          date: item.date,
-          partySize: item.partySize,
-          session: item.session,
-          price: item.price,
-          imageSrc: item.imageSrc,
-          qrCode: item.qrCode,
-        })),
-      })
+          if (!confirmResponse.ok) {
+            throw new Error(confirmData?.error || "Unable to confirm reservation.")
+          }
 
-      setCompletedItems(normalizedItems)
-      setReservationCode(newCode)
-      clearCart()
-      didInitializeRef.current = true
-      return
-    }
+          const normalizedItems = items.map((item, index) =>
+            normalizeReservationItem({
+              id: item.id,
+              itemType: item.itemType,
+              productId: item.productId,
+              zoneId: item.zoneId,
+              zoneName: item.zoneName,
+              section: item.section,
+              date: item.date,
+              partySize: item.partySize,
+              session: item.session,
+              price: item.price,
+              imageSrc: item.imageSrc,
+              reservationId: item.reservationId,
+              holdToken: item.holdToken,
+              expiresAt: item.expiresAt,
+              qrCode: buildItemQrCode(
+                `${item.id}-${index}`,
+                item.itemType === "pass" ? "pass" : "zone"
+              ),
+            })
+          ) as CompletedItem[]
 
-    if (existing && existing.items?.length > 0) {
-      setCompletedItems(
-        existing.items.map((item) => normalizeReservationItem(item)) as CompletedItem[]
-      )
-      setReservationCode(existing.reservationCode)
+          const subtotal = normalizedItems.reduce((sum, item) => sum + item.price, 0)
+          const pricing = calculateBookingPricing(subtotal)
 
-      if (existing.guestInfo) {
-        setFirstName(existing.guestInfo.firstName || "")
-        setLastName(existing.guestInfo.lastName || "")
-        setEmail(existing.guestInfo.email || "")
-        setPhone(existing.guestInfo.phone || "")
-        setMarketingOptIn(!!existing.guestInfo.marketingOptIn)
+          saveLatestReservation({
+            reservationCode: confirmData?.reservationCode || "",
+            createdAt: new Date().toISOString(),
+            subtotal: pricing.subtotal,
+            tax: pricing.tax,
+            processingFee: pricing.processingFee,
+            total: pricing.total,
+            items: normalizedItems.map((item) => ({
+              id: item.id,
+              itemType: item.itemType,
+              productId: item.productId,
+              zoneId: item.zoneId,
+              zoneName: item.zoneName,
+              section: item.section,
+              date: item.date,
+              partySize: item.partySize,
+              session: item.session,
+              price: item.price,
+              imageSrc: item.imageSrc,
+              qrCode: item.qrCode,
+              reservationId: item.reservationId,
+              holdToken: item.holdToken,
+              expiresAt: item.expiresAt,
+            })),
+          })
+
+          setCompletedItems(normalizedItems)
+          setReservationCode(confirmData?.reservationCode || "")
+          clearCart()
+          didInitializeRef.current = true
+          return
+        } catch (error) {
+          setConfirmationError(
+            error instanceof Error ? error.message : "Unable to confirm reservation."
+          )
+          didInitializeRef.current = true
+          return
+        } finally {
+          setIsConfirming(false)
+        }
+      }
+
+      if (existing && existing.items?.length > 0) {
+        setCompletedItems(
+          existing.items.map((item) => normalizeReservationItem(item)) as CompletedItem[]
+        )
+        setReservationCode(existing.reservationCode)
+
+        if (existing.guestInfo) {
+          setFirstName(existing.guestInfo.firstName || "")
+          setLastName(existing.guestInfo.lastName || "")
+          setEmail(existing.guestInfo.email || "")
+          setPhone(existing.guestInfo.phone || "")
+          setMarketingOptIn(!!existing.guestInfo.marketingOptIn)
+        }
+
+        didInitializeRef.current = true
+        return
       }
 
       didInitializeRef.current = true
-      return
     }
 
-    didInitializeRef.current = true
-  }, [hydrated, hasSuccessfulReturn, items, clearCart])
+    initializeConfirmation()
+  }, [hydrated, hasSuccessfulReturn, items, clearCart, paymentIntentId, redirectStatus])
 
   const subtotal = useMemo(
     () => completedItems.reduce((sum, item) => sum + item.price, 0),
@@ -332,6 +388,141 @@ export default function ConfirmationClient() {
 
     setSavedMessage("Details saved. You can use them later to retrieve your reservation.")
     window.setTimeout(() => setSavedMessage(""), 2600)
+  }
+
+  if (isConfirming) {
+    return (
+      <MobileShell>
+        <div
+          style={{
+            minHeight: "100dvh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background:
+              "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 52%, #FFF4E5 100%)",
+            margin: "-16px",
+            padding: "20px 16px 40px",
+            color: COLORS.text,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 520,
+              width: "100%",
+              padding: 24,
+              borderRadius: 24,
+              background: COLORS.card,
+              border: `1px solid ${COLORS.border}`,
+              boxShadow: "0 18px 36px rgba(15,23,42,0.06)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: COLORS.text,
+                marginBottom: 8,
+              }}
+            >
+              Finalizing your booking...
+            </div>
+            <div
+              style={{
+                fontSize: 15,
+                lineHeight: 1.6,
+                color: COLORS.textSoft,
+              }}
+            >
+              We’re confirming your reservation and preparing your QR codes.
+            </div>
+          </div>
+        </div>
+      </MobileShell>
+    )
+  }
+
+  if (confirmationError) {
+    return (
+      <MobileShell>
+        <div
+          style={{
+            minHeight: "100dvh",
+            background:
+              "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 52%, #FFF4E5 100%)",
+            margin: "-16px",
+            padding: "20px 16px 40px",
+            color: COLORS.text,
+          }}
+        >
+          <div style={{ maxWidth: 620, margin: "0 auto" }}>
+            <div
+              style={{
+                padding: 24,
+                borderRadius: 24,
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                boxShadow: "0 18px 36px rgba(15,23,42,0.06)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  color: COLORS.text,
+                  marginBottom: 10,
+                }}
+              >
+                We could not finalize your reservation
+              </div>
+              <div
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                  color: COLORS.textSoft,
+                  marginBottom: 16,
+                }}
+              >
+                {confirmationError}
+              </div>
+              {/* <button
+                onClick={() => router.push("/book/details")}
+                style={{
+                  width: "100%",
+                  height: 52,
+                  border: "none",
+                  borderRadius: 18,
+                  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Return to checkout
+              </button> */}
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  width: "100%",
+                  height: 52,
+                  border: "none",
+                  borderRadius: 18,
+                  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Try confirmation again
+              </button>
+            </div>
+          </div>
+        </div>
+      </MobileShell>
+    )
   }
 
   return (

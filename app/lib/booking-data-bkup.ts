@@ -13,6 +13,7 @@ export type VenueZone = {
   id: string
   name: string
   type: VenueZoneType
+  //floor: "Rooftop"
   floor: string
   section: string
   capacityMin: number
@@ -40,8 +41,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 6,
     price: 295,
     minSpend: 700,
-    description:
-      "Premium corner lounge with a strong private feel and elevated rooftop energy.",
+    description: "Premium corner lounge with a strong private feel and elevated rooftop energy.",
     perks: ["Corner placement", "Premium visibility", "Best for celebrations"],
     svgId: "R1",
   },
@@ -69,8 +69,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 6,
     price: 190,
     minSpend: 435,
-    description:
-      "Balanced rooftop table with easy circulation and strong visibility.",
+    description: "Balanced rooftop table with easy circulation and strong visibility.",
     perks: ["Balanced location", "Clean sightline"],
     svgId: "R3",
   },
@@ -84,8 +83,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 5,
     price: 215,
     minSpend: 500,
-    description:
-      "Lounge-style rooftop seating with a relaxed setup along the perimeter.",
+    description: "Lounge-style rooftop seating with a relaxed setup along the perimeter.",
     perks: ["Softer seating", "Open-air feel"],
     svgId: "R4",
   },
@@ -99,8 +97,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 5,
     price: 225,
     minSpend: 525,
-    description:
-      "Popular right-side table with strong energy and direct view into the action.",
+    description: "Popular right-side table with strong energy and direct view into the action.",
     perks: ["Strong view", "Great for groups"],
     svgId: "R5",
   },
@@ -114,8 +111,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 8,
     price: 310,
     minSpend: 740,
-    description:
-      "High-demand lower-right VIP placement with premium edge positioning.",
+    description: "High-demand lower-right VIP placement with premium edge positioning.",
     perks: ["VIP feel", "Premium edge location", "Celebration-ready"],
     svgId: "R6",
   },
@@ -129,8 +125,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 5,
     price: 240,
     minSpend: 560,
-    description:
-      "Strong table with direct visual energy from the DJ-side experience.",
+    description: "Strong table with direct visual energy from the DJ-side experience.",
     perks: ["DJ-facing energy", "Popular lower deck"],
     svgId: "R7",
   },
@@ -144,8 +139,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 5,
     price: 210,
     minSpend: 490,
-    description:
-      "Comfortable lounge seating along the lower-left side of the rooftop.",
+    description: "Comfortable lounge seating along the lower-left side of the rooftop.",
     perks: ["Relaxed setup", "Conversation-friendly"],
     svgId: "R8",
   },
@@ -159,8 +153,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 6,
     price: 175,
     minSpend: 400,
-    description:
-      "Value-forward west-side rooftop table with good movement and easy entry.",
+    description: "Value-forward west-side rooftop table with good movement and easy entry.",
     perks: ["Value option", "Easy access"],
     svgId: "R9",
   },
@@ -174,8 +167,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 4,
     price: 180,
     minSpend: 410,
-    description:
-      "Compact rooftop table tucked near the upper-left palm tree and perimeter.",
+    description: "Compact rooftop table tucked near the upper-left palm tree and perimeter.",
     perks: ["Distinct setting", "Good for smaller groups"],
     svgId: "R10",
   },
@@ -189,8 +181,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 4,
     price: 255,
     minSpend: 600,
-    description:
-      "Center lounge seating with a social, visible, high-energy rooftop placement.",
+    description: "Center lounge seating with a social, visible, high-energy rooftop placement.",
     perks: ["Central energy", "Group-friendly"],
     svgId: "M1",
   },
@@ -204,8 +195,7 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 4,
     price: 255,
     minSpend: 600,
-    description:
-      "Center lounge placement ideal for guests who want the rooftop experience all around them.",
+    description: "Center lounge placement ideal for guests who want the rooftop experience all around them.",
     perks: ["Central placement", "Great for birthdays"],
     svgId: "M2",
   },
@@ -219,14 +209,12 @@ const rooftopZones: VenueZone[] = [
     capacityMax: 4,
     price: 235,
     minSpend: 550,
-    description:
-      "A strong center-feature table with balanced access and premium visibility.",
+    description: "A strong center-feature table with balanced access and premium visibility.",
     perks: ["Center feature", "Balanced flow"],
     svgId: "M3",
   },
 ]
 
-// Keep this export for compatibility until BookMapClient is migrated
 export const venueZones: VenueZone[] = rooftopZones
 
 const explicitAvailability: Record<string, ZoneAvailability[]> = {

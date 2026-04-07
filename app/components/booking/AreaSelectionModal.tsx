@@ -1,3 +1,4 @@
+// app/components/booking/AreaSelectionModal.tsx
 "use client"
 
 type AreaSelectionModalProps = {
@@ -201,7 +202,7 @@ export default function AreaSelectionModal({
               {sectionName}
             </div>
 
-            <div
+            {/* <div
               style={{
                 marginTop: 8,
                 fontSize: 13,
@@ -212,7 +213,7 @@ export default function AreaSelectionModal({
             >
               A quick preview of the table/lounge setup so guests can clearly see what
               they are reserving.
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -224,7 +225,7 @@ export default function AreaSelectionModal({
             marginTop: 16,
           }}
         >
-          {[dateLabel, partySizeLabel, sessionLabel].map((item) => (
+          {/* {[dateLabel, partySizeLabel, sessionLabel].map((item) => (
             <div
               key={item}
               style={{
@@ -241,7 +242,7 @@ export default function AreaSelectionModal({
             >
               {item}
             </div>
-          ))}
+          ))} */}
         </div>
       </div>
 

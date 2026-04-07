@@ -4,14 +4,38 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import MobileShell from "@/app/components/booking/MobileShell"
-import VenueMap from "@/app/components/booking/VenueMap"
+//import VenueMap from "@/app/components/booking/VenueMap"
 import ZoneDetailsCard from "@/app/components/booking/ZoneDetailsCard"
 import AreaSelectionModal from "@/app/components/booking/AreaSelectionModal"
 import DatePickerModal from "@/app/components/booking/DatePickerModal"
-import { getZoneStatus, venueZones } from "@/app/lib/booking-data"
+import {
+  venueZones,
+  type VenueZone,
+  type ZoneStatus,
+} from "@/app/lib/booking-data"
+import {
+  getEventBookingMetaBySlug,
+  getReservationStatusesForEventSlugAndDate,
+  getVenueZonesForEventSlug,
+} from "@/app/lib/booking-queries"
 import { passProducts } from "@/app/lib/book-pass-data"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import Image from "next/image"
+import dynamic from "next/dynamic"
+
+const VenueMap = dynamic(() => import("@/app/components/booking/VenueMap"), {
+  ssr: false,
+  loading: () => (
+    <div
+      style={{
+        width: "100%",
+        minHeight: "100dvh",
+        background: "#FFFFFF",
+      }}
+    />
+  ),
+})
+
 
 function formatDisplayDate(dateKey: string) {
   if (!dateKey) return "No date selected"
@@ -42,6 +66,10 @@ function formatDateKey(date: Date) {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0")
   const day = String(date.getUTCDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
+}
+
+function isYyyyMmDd(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 function formatShortDate(dateKey: string) {
@@ -116,6 +144,11 @@ type FrozenSelection = {
   session: string
   price: number
   imageSrc?: string
+
+  // reservation hold metadata
+  reservationId?: string
+  holdToken?: string
+  expiresAt?: string
 }
 
 type PromotionTile = {
@@ -126,6 +159,13 @@ type PromotionTile = {
   accentBg: string
   accentColor: string
   tag: string
+}
+
+type ActiveEventMeta = {
+  name: string
+  venueName: string
+  date: string
+  mapImageSrc: string
 }
 
 const promotionTiles: PromotionTile[] = [
@@ -1374,41 +1414,28 @@ export default function BookMapPage() {
   const eventSlug = sp.get("event") || ""
   const isEventMode = !!eventSlug
 
-  const EVENT_META: Record<
-    string,
-  {
-    name: string
-    venueName: string
-    date: string
-  }
-  > = {
-  "daer-sundays": {
-    name: "Sundays",
-    venueName: "DAER Dayclub",
-    date: "2026-04-12",
-  },
-}
+  const [activeEvent, setActiveEvent] = useState<ActiveEventMeta | null>(null)
+  const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+  const mapImageSrc = activeEvent?.mapImageSrc || ""
 
-const activeEvent = eventSlug ? EVENT_META[eventSlug] ?? null : null
-const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+  // const filteredZones = useMemo(() => {
+  //   if (!rawPartySize || partySize === null) {
+  //     return venueZones
+  //   }
 
-  const filteredZones = useMemo(() => {
-    if (!rawPartySize || partySize === null) {
-      return venueZones
-    }
-
-    return venueZones.filter((zone) => {
-      if (rawPartySize === "10+") {
-        return zone.capacityMax >= 10
-      }
-      return partySize >= zone.capacityMin && partySize <= zone.capacityMax
-    })
-  }, [partySize, rawPartySize])
+  //   return venueZones.filter((zone) => {
+  //     if (rawPartySize === "10+") {
+  //       return zone.capacityMax >= 10
+  //     }
+  //     return partySize >= zone.capacityMin && partySize <= zone.capacityMax
+  //   })
+  // }, [partySize, rawPartySize])
 
   const [selectedZoneId, setSelectedZoneId] = useState<string | undefined>()
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectionModalOpen, setSelectionModalOpen] = useState(false)
   const [selectionDraft, setSelectionDraft] = useState<FrozenSelection | null>(null)
+  const [holdLoading, setHoldLoading] = useState(false)
   const [inventoryTileOpen, setInventoryTileOpen] = useState(true)
   const [cartMessage, setCartMessage] = useState("")
   const [passModalOpen, setPassModalOpen] = useState(false)
@@ -1427,6 +1454,187 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
 
   const actionInFlightRef = useRef(false)
 
+  const [dbZones, setDbZones] = useState<VenueZone[] | null>(null)
+  const [zonesLoading, setZonesLoading] = useState(false)
+  const [dbStatusByZoneId, setDbStatusByZoneId] = useState<Record<string, ZoneStatus>>({})
+
+  useEffect(() => {
+    const fallbackDate = buildNextTwoWeeks("")[0]
+    setPassDate(date || fallbackDate)
+    setPromotionDate(date || fallbackDate)
+  }, [date])
+
+  useEffect(() => {
+  let cancelled = false
+
+  async function loadZones() {
+    if (!eventSlug) {
+      setDbZones(null)
+      return
+    }
+
+    setZonesLoading(true)
+
+    try {
+      const zones = await getVenueZonesForEventSlug(eventSlug)
+      if (!cancelled) {
+        setDbZones(zones.length > 0 ? zones : null)
+      }
+    } catch (error) {
+      console.error("Error loading Supabase zones:", error)
+      if (!cancelled) {
+        setDbZones(null)
+      }
+    } finally {
+      if (!cancelled) {
+        setZonesLoading(false)
+      }
+    }
+  }
+
+  loadZones()
+
+  return () => {
+    cancelled = true
+  }
+}, [eventSlug])
+
+  useEffect(() => {
+  let cancelled = false
+
+  async function loadEventMeta() {
+    if (!eventSlug) {
+      setActiveEvent(null)
+      return
+    }
+
+    try {
+      const meta = await getEventBookingMetaBySlug(eventSlug)
+
+      if (!cancelled) {
+        if (meta) {
+          setActiveEvent({
+            name: meta.name,
+            venueName: meta.venueName,
+            date: meta.date,
+            mapImageSrc: meta.mapImages?.[0] || "",
+          })
+        } else {
+          setActiveEvent(null)
+        }
+      }
+    } catch (error) {
+      console.error("Error loading event meta:", error)
+      if (!cancelled) {
+        setActiveEvent(null)
+      }
+    }
+  }
+
+  loadEventMeta()
+
+  return () => {
+    cancelled = true
+  }
+}, [eventSlug])
+
+  useEffect(() => {
+  let cancelled = false
+
+  async function loadReservationStatuses() {
+    if (!eventSlug || !effectiveDate) {
+      if (!cancelled) {
+        setDbStatusByZoneId({})
+      }
+      return
+    }
+
+    try {
+      const params = new URLSearchParams({
+        eventSlug,
+        date: effectiveDate,
+      })
+
+      if (session && session.trim()) {
+        params.set("session", session.trim())
+      }
+
+      const response = await fetch(`/api/reservations/statuses?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to load reservation statuses.")
+      }
+
+      if (!cancelled) {
+        setDbStatusByZoneId(data?.statuses || {})
+      }
+    } catch (error) {
+      console.error("Error loading reservation statuses:", error)
+      if (!cancelled) {
+        setDbStatusByZoneId({})
+      }
+    }
+  }
+
+  function refreshStatuses() {
+    loadReservationStatuses()
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === "visible") {
+      refreshStatuses()
+    }
+  }
+
+  function handleWindowFocus() {
+    refreshStatuses()
+  }
+
+  function handlePageShow() {
+    refreshStatuses()
+  }
+
+  refreshStatuses()
+
+  window.addEventListener("focus", handleWindowFocus)
+  window.addEventListener("pageshow", handlePageShow)
+  document.addEventListener("visibilitychange", handleVisibilityChange)
+
+  return () => {
+    cancelled = true
+    window.removeEventListener("focus", handleWindowFocus)
+    window.removeEventListener("pageshow", handlePageShow)
+    document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }
+}, [eventSlug, effectiveDate, session])
+
+  const activeZones = useMemo(() => {
+  if (isEventMode) {
+    return dbZones ?? []
+  }
+
+  return venueZones
+}, [dbZones, isEventMode])
+
+  const filteredZones = useMemo(() => {
+    if (!rawPartySize || partySize === null) {
+      return activeZones
+    }
+
+    return activeZones.filter((zone) => {
+      if (rawPartySize === "10+") {
+        return zone.capacityMax >= 10
+      }
+      return partySize >= zone.capacityMin && partySize <= zone.capacityMax
+    })
+  }, [activeZones, partySize, rawPartySize])
+
+
   useEffect(() => {
     const fallbackDate = buildNextTwoWeeks("")[0]
     setPassDate(date || fallbackDate)
@@ -1434,11 +1642,17 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
   }, [date])
 
   const statusByZoneId = useMemo(() => {
+  if (isEventMode) {
     return Object.fromEntries(
-      venueZones.map((zone) => [zone.id, getZoneStatus(date, zone.id)])
+      activeZones.map((zone) => [zone.id, dbStatusByZoneId[zone.id] ?? "available"])
     )
-  }, [date])
-  
+  }
+
+  return Object.fromEntries(
+    activeZones.map((zone) => [zone.id, "available" as ZoneStatus])
+  )
+}, [activeZones, dbStatusByZoneId, isEventMode])
+
   const inventorySummary = useMemo(() => {
     const availableTables = filteredZones.filter((zone) => {
       const status = statusByZoneId[zone.id]
@@ -1473,7 +1687,7 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
     }
   }, [filteredZones, statusByZoneId])
 
-  const selectedZone = venueZones.find((zone) => zone.id === selectedZoneId)
+  const selectedZone = activeZones.find((zone) => zone.id === selectedZoneId)
   const selectedStatus = selectedZoneId ? statusByZoneId[selectedZoneId] : undefined
   const selectedZoneMatchesParty =
     !rawPartySize || partySize === null
@@ -1506,22 +1720,43 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
   }, [cartMessage])
 
   function buildFrozenSelectionFromCurrent(): FrozenSelection | null {
-    if (!selectedZone || !selectedZonePurchasable) return null
+  if (!selectedZone || !selectedZonePurchasable) return null
 
-    return {
-      id: `${selectedZone.id}-${date}-${session || "unset-session"}`,
-      itemType: "zone",
-      productId: selectedZone.id,
-      zoneId: selectedZone.id,
-      zoneName: selectedZone.name,
-      section: selectedZone.section,
-      date,
-      partySize: partySizeDisplay || "Not set",
-      session: session || "Not set",
-      price: selectedZone.price,
-      imageSrc: "/images/table-preview.jpg",
-    }
+  const queryDate = (date || "").trim()
+  const activeEventDate = (activeEvent?.date || "").trim()
+
+  const candidateDate = isYyyyMmDd(queryDate)
+    ? queryDate
+    : isYyyyMmDd(activeEventDate)
+      ? activeEventDate
+      : ""
+
+  console.log("Reservation date debug", {
+    queryDate,
+    activeEventDate,
+    effectiveDate,
+    candidateDate,
+    eventSlug,
+  })
+
+  if (!isYyyyMmDd(candidateDate)) {
+    return null
   }
+
+  return {
+    id: `${selectedZone.id}-${candidateDate}-${session || "unset-session"}`,
+    itemType: "zone",
+    productId: selectedZone.id,
+    zoneId: selectedZone.id,
+    zoneName: selectedZone.name,
+    section: selectedZone.section,
+    date: candidateDate,
+    partySize: partySizeDisplay || "Not set",
+    session: session || "Not set",
+    price: selectedZone.price,
+    imageSrc: mapImageSrc || undefined,
+  }
+}
 
   function resetSelectionView(message: string) {
     setSelectionModalOpen(false)
@@ -1577,29 +1812,117 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
     setDatePickerOpen(true)
   }
 
-  function openSelectionModal() {
-    if (!selectedZone) return
+  async function createReservationHold(selection: FrozenSelection) {
+  const normalizedDate = (selection.date || "").trim()
 
-    if (!selectedZoneMatchesParty) {
-      setCartMessage("This zone does not support your selected group size.")
-      return
+  if (!isYyyyMmDd(normalizedDate)) {
+    console.error("Invalid eventDate sent to hold route:", {
+      selectionDate: selection.date,
+      normalizedDate,
+      selection,
+      eventSlug,
+      activeEventDate: activeEvent?.date,
+      queryDate: date,
+    })
+
+    const invalidDateError = new Error("Reservation date is missing or invalid.") as Error & {
+      status?: number
+    }
+    invalidDateError.status = 400
+    throw invalidDateError
+  }
+
+  const response = await fetch("/api/reservations/hold", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      eventSlug,
+      eventDate: normalizedDate,
+      session:
+        selection.session && selection.session !== "Not set"
+          ? selection.session
+          : null,
+      zoneId: selection.zoneId,
+      partySize:
+        selection.partySize && selection.partySize !== "Not set"
+          ? Number(selection.partySize.replace("+", ""))
+          : null,
+      price: selection.price,
+    }),
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const holdError = new Error(
+      data?.error || "Unable to hold this reservation."
+    ) as Error & { status?: number }
+
+    holdError.status = response.status
+    throw holdError
+  }
+
+  return data
+}
+
+  async function openSelectionModal() {
+  if (holdLoading) return
+  if (!selectedZone) return
+
+  if (!selectedZoneMatchesParty) {
+    setCartMessage("This zone does not support your selected group size.")
+    return
+  }
+
+  if (selectedStatus === "booked") {
+    setCartMessage("This zone is already booked for the selected date.")
+    return
+  }
+
+  const nextDraft = buildFrozenSelectionFromCurrent()
+  if (!nextDraft) {
+    setCartMessage("We couldn't confirm the reservation date. Please refresh and try again.")
+    return
+  }
+
+  setHoldLoading(true)
+
+  try {
+    const hold = await createReservationHold(nextDraft)
+
+    const heldDraft: FrozenSelection = {
+      ...nextDraft,
+      reservationId: hold?.reservation?.id || hold?.reservationId,
+      holdToken: hold?.holdToken,
+      expiresAt: hold?.reservation?.expires_at || hold?.expiresAt,
     }
 
-    if (selectedStatus === "booked") {
-      setCartMessage("This zone is already booked for the selected date.")
-      return
-    }
-
-    const nextDraft = buildFrozenSelectionFromCurrent()
-    if (!nextDraft) {
-      setCartMessage("We couldn't confirm that area. Please tap the area again.")
-      return
-    }
-
-    setSelectionDraft(nextDraft)
+    setSelectionDraft(heldDraft)
     setDetailsOpen(false)
     setSelectionModalOpen(true)
+  } catch (error) {
+    const holdError = error as Error & { status?: number }
+
+    if (holdError.status === 409 && selectedZone) {
+      setDbStatusByZoneId((prev) => ({
+        ...prev,
+        [selectedZone.id]: "booked",
+      }))
+
+      setCartMessage("This table is no longer available.")
+      return
+    }
+
+    console.error("Error creating reservation hold:", error)
+    setCartMessage(
+      holdError?.message || "Unable to hold this table right now."
+    )
+  } finally {
+    setHoldLoading(false)
   }
+}
 
   function handleCloseSelectionModal() {
     setSelectionModalOpen(false)
@@ -1621,7 +1944,12 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
         return
       }
 
-      const result = addItem(selectionDraft)
+      const result = addItem({
+      ...selectionDraft,
+      reservationId: selectionDraft.reservationId,
+      holdToken: selectionDraft.holdToken,
+      expiresAt: selectionDraft.expiresAt,
+    })
 
       if (result.added) {
         resetSelectionView("Added to cart. Select another location or open your cart.")
@@ -1648,7 +1976,12 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
         return
       }
 
-      addItem(selectionDraft)
+      addItem({
+      ...selectionDraft,
+      reservationId: selectionDraft.reservationId,
+      holdToken: selectionDraft.holdToken,
+      expiresAt: selectionDraft.expiresAt,
+    })
       setSelectionModalOpen(false)
       setSelectionDraft(null)
       setDetailsOpen(false)
@@ -1883,6 +2216,8 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
           onSelect={handleZoneSelect}
           interactionLocked={interactionLocked}
           controlsBottomOffset={mapControlsBottomOffset}
+          mapImageSrc={mapImageSrc || undefined}
+          mapImageAlt={activeEvent ? `${activeEvent.name} venue map` : "Venue map"}
         />
 
         <div
@@ -2214,6 +2549,10 @@ const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
           isOpen={detailsOpen}
           onClose={handleCloseDetails}
           onContinue={openSelectionModal}
+          previewImageSrc={mapImageSrc || undefined}
+          previewImageAlt={
+            activeEvent ? `${activeEvent.name} seating preview` : undefined
+  }
         />
 
         <AreaSelectionModal

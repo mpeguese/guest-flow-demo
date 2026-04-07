@@ -6,9 +6,20 @@ import {
   TransformWrapper,
   useControls,
 } from "react-zoom-pan-pinch"
-import { useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { VenueZone, ZoneStatus } from "@/app/lib/booking-data"
 import { COLORS } from "@/app/lib/theme"
+
+type ZoneWithMapPlacement = VenueZone & {
+  code?: string | null
+  mapZoneId?: string | null
+  xPct?: number | string | null
+  yPct?: number | string | null
+  wPct?: number | string | null
+  hPct?: number | string | null
+  rotationDeg?: number | string | null
+  zIndex?: number | null
+}
 
 type Props = {
   zones: VenueZone[]
@@ -17,31 +28,20 @@ type Props = {
   onSelect: (zoneId: string) => void
   interactionLocked?: boolean
   controlsBottomOffset?: number
+  mapImageSrc?: string
+  mapImageAlt?: string
 }
 
-type Hotspot = {
-  id: string
+type RenderHotspot = {
+  zoneId: string
+  label: string
   xPct: number
   yPct: number
   wPct: number
   hPct: number
+  rotationDeg: number
+  zIndex: number
 }
-
-const hotspots: Hotspot[] = [
-  { id: "R1", xPct: 16.18, yPct: 3.6, wPct: 12.81, hPct: 7.84 },
-  { id: "R2", xPct: 42.7, yPct: 3.6, wPct: 12.81, hPct: 7.84 },
-  { id: "R3", xPct: 58.2, yPct: 28.39, wPct: 12.25, hPct: 8.69 },
-  { id: "R4", xPct: 71.12, yPct: 28.39, wPct: 12.25, hPct: 8.69 },
-  { id: "R5", xPct: 94.04, yPct: 7.42, wPct: 4.38, hPct: 25.21 },
-  { id: "R6", xPct: 94.04, yPct: 65.89, wPct: 3.6, hPct: 24.36 },
-  { id: "R7", xPct: 78.76, yPct: 86.02, wPct: 12.81, hPct: 8.26 },
-  { id: "R8", xPct: 51.8, yPct: 86.86, wPct: 12.81, hPct: 8.26 },
-  { id: "R9", xPct: 16.18, yPct: 86.86, wPct: 12.36, hPct: 8.26 },
-  { id: "R10", xPct: 8.2, yPct: 50, wPct: 3.82, hPct: 23.73 },
-  { id: "M1", xPct: 42.7, yPct: 44.28, wPct: 2.36, hPct: 4.24 },
-  { id: "M2", xPct: 38.31, yPct: 53.81, wPct: 1.8, hPct: 3.6 },
-  { id: "M3", xPct: 33.26, yPct: 44.28, wPct: 1.91, hPct: 4.24 },
-]
 
 function getFill(status: ZoneStatus, selected: boolean) {
   if (selected) return "rgba(255, 209, 102, 0.94)"
@@ -61,6 +61,19 @@ function getTextColor(status: ZoneStatus, selected: boolean) {
   if (selected) return "#1A1303"
   if (status === "booked") return "#FFE3E3"
   return "#FFFFFF"
+}
+
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
 }
 
 function MapControls({ bottomOffset = 96 }: { bottomOffset?: number }) {
@@ -122,8 +135,14 @@ export default function VenueMap({
   onSelect,
   interactionLocked = false,
   controlsBottomOffset = 96,
+  mapImageSrc,
+  mapImageAlt = "Venue map",
 }: Props) {
-  const zoneIds = useMemo(() => new Set(zones.map((zone) => zone.id)), [zones])
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const pointerStateRef = useRef({
     isDown: false,
@@ -131,6 +150,40 @@ export default function VenueMap({
     startY: 0,
     moved: false,
   })
+
+  const renderHotspots = useMemo<RenderHotspot[]>(() => {
+    return (zones as ZoneWithMapPlacement[])
+      .map((zone) => {
+        const xPct = toNumber(zone.xPct)
+        const yPct = toNumber(zone.yPct)
+        const wPct = toNumber(zone.wPct)
+        const hPct = toNumber(zone.hPct)
+        const rotationDeg = toNumber(zone.rotationDeg) ?? 0
+        const zIndex = zone.zIndex ?? 3
+
+        if (
+          xPct === null ||
+          yPct === null ||
+          wPct === null ||
+          hPct === null
+        ) {
+          return null
+        }
+
+        return {
+          zoneId: zone.id,
+          label: zone.code?.trim() || zone.name,
+          xPct,
+          yPct,
+          wPct,
+          hPct,
+          rotationDeg,
+          zIndex,
+        }
+      })
+      .filter((spot): spot is RenderHotspot => !!spot)
+      .sort((a, b) => a.zIndex - b.zIndex)
+  }, [zones])
 
   function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     pointerStateRef.current.isDown = true
@@ -157,8 +210,7 @@ export default function VenueMap({
 
   function handlePointerUp(
     e: React.PointerEvent<HTMLButtonElement>,
-    zoneId: string,
-    zoneExists: boolean
+    zoneId: string
   ) {
     e.preventDefault()
     e.stopPropagation()
@@ -168,9 +220,67 @@ export default function VenueMap({
 
     if (interactionLocked) return
     if (moved) return
-    if (!zoneExists) return
 
     onSelect(zoneId)
+  }
+
+  const resolvedMapImageSrc = mapImageSrc || "/images/guestflow-rooftop.jpg"
+  const hasPlacements = renderHotspots.length > 0
+
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          borderRadius: 0,
+          overflow: "hidden",
+          background: COLORS.bg,
+          border: "none",
+          boxShadow: "none",
+          width: "100%",
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            background: COLORS.bg,
+            minHeight: "100dvh",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              display: "block",
+              userSelect: "none",
+            }}
+          >
+            <img
+              src={resolvedMapImageSrc}
+              alt={mapImageAlt}
+              draggable={false}
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+                userSelect: "none",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "linear-gradient(180deg, rgba(4,9,14,0.08) 0%, rgba(4,9,14,0.02) 36%, rgba(4,9,14,0.10) 100%)",
+                pointerEvents: "none",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -235,8 +345,8 @@ export default function VenueMap({
               }}
             >
               <img
-                src="/images/guestflow-rooftop.jpg"
-                alt="Guestflow rooftop map"
+                src={resolvedMapImageSrc}
+                alt={mapImageAlt}
                 draggable={false}
                 style={{
                   width: "100%",
@@ -257,80 +367,96 @@ export default function VenueMap({
                 }}
               />
 
-              {hotspots.map((spot) => {
-                const status = statusByZoneId?.[spot.id] ?? "available"
-                const isSelected = selectedZoneId === spot.id
-                const zoneExists = zoneIds.has(spot.id)
-                const isDisabled = interactionLocked || !zoneExists
+              {hasPlacements
+                ? renderHotspots.map((spot) => {
+                    const status = statusByZoneId?.[spot.zoneId] ?? "available"
+                    const isSelected = selectedZoneId === spot.zoneId
+                    const isDisabled = interactionLocked
 
-                return (
-                  <button
-                    key={spot.id}
-                    type="button"
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={(e) => handlePointerUp(e, spot.id, zoneExists)}
-                    onPointerCancel={resetPointerState}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                    disabled={isDisabled}
-                    aria-label={`Select ${spot.id}`}
-                    title={zoneExists ? spot.id : `${spot.id} (not configured)`}
-                    style={{
-                      position: "absolute",
-                      left: `${spot.xPct}%`,
-                      top: `${spot.yPct}%`,
-                      width: `${spot.wPct}%`,
-                      height: `${spot.hPct}%`,
-                      zIndex: 3,
-                      borderRadius: 16,
-                      border: `2px solid ${getStroke(status, isSelected)}`,
-                      background: getFill(status, isSelected),
-                      boxShadow: isSelected
-                        ? "0 0 0 3px rgba(255,209,102,0.24), 0 14px 28px rgba(0,0,0,0.22)"
-                        : "0 10px 18px rgba(0,0,0,0.14)",
-                      cursor: isDisabled ? "default" : "pointer",
-                      transition:
-                        "transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease, opacity 160ms ease",
-                      backdropFilter: "blur(1.5px)",
-                      opacity: interactionLocked && !isSelected ? 0.92 : 1,
-                      touchAction: "none",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected && !isDisabled) {
-                        e.currentTarget.style.transform = "translateY(-1px)"
-                        e.currentTarget.style.boxShadow = "0 14px 24px rgba(0,0,0,0.18)"
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) {
-                        e.currentTarget.style.transform = "translateY(0)"
-                        e.currentTarget.style.boxShadow = "0 10px 18px rgba(0,0,0,0.14)"
-                      }
-                    }}
-                  >
-                    <span
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "50%",
-                        transform: "translate(-50%, -50%)",
-                        color: getTextColor(status, isSelected),
-                        fontWeight: 900,
-                        fontSize: 12,
-                        letterSpacing: 0.4,
-                        textShadow: isSelected ? "none" : "0 1px 2px rgba(0,0,0,0.28)",
-                        pointerEvents: "none",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {spot.id}
-                    </span>
-                  </button>
-                )
-              })}
+                    return (
+                      <button
+                        key={spot.zoneId}
+                        type="button"
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={(e) => handlePointerUp(e, spot.zoneId)}
+                        onPointerCancel={resetPointerState}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                        disabled={isDisabled}
+                        aria-label={`Select ${spot.label}`}
+                        title={spot.label}
+                        style={{
+                          position: "absolute",
+                          left: `${spot.xPct}%`,
+                          top: `${spot.yPct}%`,
+                          width: `${spot.wPct}%`,
+                          height: `${spot.hPct}%`,
+                          zIndex: spot.zIndex,
+                          borderRadius: 16,
+                          border: `2px solid ${getStroke(status, isSelected)}`,
+                          background: getFill(status, isSelected),
+                          boxShadow: isSelected
+                            ? "0 0 0 3px rgba(255,209,102,0.24), 0 14px 28px rgba(0,0,0,0.22)"
+                            : "0 10px 18px rgba(0,0,0,0.14)",
+                          cursor: isDisabled ? "default" : "pointer",
+                          transition:
+                            "transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease, opacity 160ms ease",
+                          backdropFilter: "blur(1.5px)",
+                          opacity: interactionLocked && !isSelected ? 0.92 : 1,
+                          touchAction: "none",
+                          transform:
+                            spot.rotationDeg !== 0
+                              ? `rotate(${spot.rotationDeg}deg)`
+                              : undefined,
+                          transformOrigin: "center",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected && !isDisabled) {
+                            e.currentTarget.style.boxShadow =
+                              "0 14px 24px rgba(0,0,0,0.18)"
+                            e.currentTarget.style.transform =
+                              spot.rotationDeg !== 0
+                                ? `translateY(-1px) rotate(${spot.rotationDeg}deg)`
+                                : "translateY(-1px)"
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.boxShadow =
+                              "0 10px 18px rgba(0,0,0,0.14)"
+                            e.currentTarget.style.transform =
+                              spot.rotationDeg !== 0
+                                ? `rotate(${spot.rotationDeg}deg)`
+                                : "translateY(0)"
+                          }
+                        }}
+                      >
+                        <span
+                          style={{
+                            position: "absolute",
+                            left: "50%",
+                            top: "50%",
+                            transform: "translate(-50%, -50%)",
+                            color: getTextColor(status, isSelected),
+                            fontWeight: 900,
+                            fontSize: 12,
+                            letterSpacing: 0.4,
+                            textShadow: isSelected
+                              ? "none"
+                              : "0 1px 2px rgba(0,0,0,0.28)",
+                            pointerEvents: "none",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {spot.label}
+                        </span>
+                      </button>
+                    )
+                  })
+                : null}
             </div>
           </TransformComponent>
         </TransformWrapper>

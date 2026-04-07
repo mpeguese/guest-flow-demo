@@ -8,10 +8,7 @@ import StripeCheckoutForm from "@/app/components/booking/StripeCheckoutForm"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
 import { getStoredPromoCode } from "@/app/lib/booking-promos"
-import {
-  generateReservationCode,
-  saveLatestReservation,
-} from "@/app/lib/reservation-confirmation"
+import { saveLatestReservation } from "@/app/lib/reservation-confirmation"
 
 function formatDate(dateKey: string) {
   if (!dateKey) return "Not selected"
@@ -47,8 +44,6 @@ export default function DetailsPage() {
     [subtotal, promoCode]
   )
 
-  const reservationCode = useMemo(() => generateReservationCode(), [])
-
   const [clientSecret, setClientSecret] = useState("")
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
@@ -69,21 +64,20 @@ export default function DetailsPage() {
         },
         body: JSON.stringify({
           promoCode,
-          pricing: {
-            subtotal: pricing.subtotal,
-            discount: pricing.discount,
-            discountedSubtotal: pricing.discountedSubtotal,
-            tax: pricing.tax,
-            processingFee: pricing.processingFee,
-            total: pricing.total,
-          },
           items: items.map((item) => ({
+            id: item.id,
             itemType: item.itemType,
             productId: item.productId,
             zoneId: item.zoneId,
+            zoneName: item.zoneName,
+            section: item.section,
             date: item.date,
             partySize: item.partySize,
             session: item.session,
+            price: item.price,
+            reservationId: item.reservationId,
+            holdToken: item.holdToken,
+            expiresAt: item.expiresAt,
           })),
         }),
       })
@@ -105,7 +99,7 @@ export default function DetailsPage() {
       }
 
       saveLatestReservation({
-        reservationCode,
+        reservationCode: "",
         createdAt: new Date().toISOString(),
         subtotal: pricing.subtotal,
         discount: pricing.discount,
@@ -127,6 +121,9 @@ export default function DetailsPage() {
           session: item.session,
           price: item.price,
           imageSrc: item.imageSrc,
+          reservationId: item.reservationId,
+          holdToken: item.holdToken,
+          expiresAt: item.expiresAt,
         })),
       })
 

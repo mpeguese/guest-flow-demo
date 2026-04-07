@@ -1,17 +1,22 @@
 // app/api/stripe/create-payment-intent/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { venueZones } from "@/app/lib/booking-data"
-import { getPassProductById } from "@/app/lib/book-pass-data"
 import { calculateBookingPricing } from "@/app/lib/booking-pricing"
 import { stripe } from "@/app/lib/stripe"
 
 type CheckoutItem = {
+  id: string
   itemType?: "zone" | "pass"
   productId?: string
   zoneId: string
+  zoneName?: string
+  section?: string
   date: string
   partySize: string
   session: string
+  price: number
+  reservationId?: string
+  holdToken?: string
+  expiresAt?: string
 }
 
 type CheckoutRequestBody = {
@@ -40,41 +45,22 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      const inferredType =
-        item.itemType || (item.session === "entry" ? "pass" : "zone")
-
-      if (inferredType === "pass") {
-        const passId =
-          item.productId ||
-          item.zoneId.split("-").slice(0, -1).join("-") ||
-          item.zoneId
-
-        const pass = getPassProductById(passId)
-
-        if (!pass) {
-          return NextResponse.json(
-            { error: `Selected pass was not found: ${passId}` },
-            { status: 404 }
-          )
-        }
-
-        subtotal += pass.price
-        continue
-      }
-
-      const zone = venueZones.find((z) => z.id === item.zoneId)
-
-      if (!zone) {
+      if (typeof item.price !== "number" || !Number.isFinite(item.price) || item.price < 0) {
         return NextResponse.json(
-          { error: `Selected zone was not found: ${item.zoneId}` },
-          { status: 404 }
+          { error: `One or more cart items have an invalid price.` },
+          { status: 400 }
         )
       }
 
-      subtotal += zone.price
+      subtotal += item.price
     }
 
     const pricing = calculateBookingPricing(subtotal, promoCode)
+
+    const zoneReservationIds = items
+      .filter((item) => (item.itemType || (item.session === "entry" ? "pass" : "zone")) === "zone")
+      .map((item) => item.reservationId)
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(pricing.total * 100),
@@ -92,6 +78,7 @@ export async function POST(req: NextRequest) {
           .map((item) => item.productId || item.zoneId)
           .join(",")
           .slice(0, 500),
+        reservationIds: zoneReservationIds.join(",").slice(0, 500),
         promoCode: pricing.appliedPromo?.code || "",
         promoDescription: pricing.appliedPromo?.description || "",
         subtotal: pricing.subtotal.toFixed(2),
