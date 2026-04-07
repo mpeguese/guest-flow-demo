@@ -41,6 +41,10 @@ function statusLabel(status?: ZoneStatus) {
   return "Select a zone"
 }
 
+function canContinue(status?: ZoneStatus) {
+  return status === "available" || status === "limited"
+}
+
 function statusColor(status?: ZoneStatus) {
   if (status === "available") return COLORS.success
   if (status === "limited") return COLORS.gold
@@ -454,6 +458,54 @@ export default function ZoneDetailsCard({
                 </div>
               </div>
             )}
+            {canContinue(status) ? (
+              <div
+                style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 14,
+                background: "rgba(245, 158, 11, 0.10)",
+                //border: "1px solid rgba(245, 158, 11, 0.22)",
+                marginBottom: 12,
+                marginTop: 15
+              }}
+            >
+              <div
+                aria-hidden="true"
+                style={{
+                  fontSize: 16,
+                  lineHeight: 1.2,
+                }}
+              >
+                ⏰
+              </div>
+
+              <div style={{ display: "grid", gap: 2 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#a10a0a",
+                  }}
+                >
+                  10-minute hold
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                    color: "#78350F",
+                  }}
+                >
+                  This zone will be reserved for 10 minutes while you complete the booking process.
+                </div>
+              </div>
+            </div>
+
+            ) : null}
+            
 
             <button
               onClick={onContinue}

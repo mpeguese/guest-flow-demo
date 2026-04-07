@@ -1,6 +1,7 @@
 // app/book/event/[slug]/EventBookingPageClient.tsx
 "use client"
 
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { EventBookingMeta } from "@/app/lib/booking-queries"
 
@@ -45,6 +46,16 @@ export default function EventBookingPageClient({
 }) {
   const router = useRouter()
 
+  const [sheetExpanded, setSheetExpanded] = useState(true)
+  const [dragY, setDragY] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const startYRef = useRef(0)
+  const startOffsetRef = useRef(0)
+
+  const collapsedPeekHeight = 148
+  const maxSheetTravel = useMemo(() => 155, [])
+
   function handleOpenMap() {
     const searchParams = new URLSearchParams({
       date: event.date,
@@ -53,6 +64,50 @@ export default function EventBookingPageClient({
 
     router.push(`${event.mapPath}?${searchParams.toString()}`)
   }
+
+  const restingOffset = sheetExpanded ? 0 : maxSheetTravel
+  const translateY = Math.max(0, Math.min(maxSheetTravel, restingOffset + dragY))
+  const isCollapsed = !sheetExpanded && !isDragging
+
+  function startDragging(clientY: number) {
+    setIsDragging(true)
+    startYRef.current = clientY
+    startOffsetRef.current = sheetExpanded ? 0 : maxSheetTravel
+  }
+
+  useEffect(() => {
+    function handlePointerMove(e: PointerEvent) {
+      if (!isDragging) return
+
+      const delta = e.clientY - startYRef.current
+      const next = Math.max(
+        -maxSheetTravel,
+        Math.min(maxSheetTravel, delta)
+      )
+      setDragY(next)
+    }
+
+    function handlePointerUp() {
+      if (!isDragging) return
+
+      const finalOffset = startOffsetRef.current + dragY
+      const shouldCollapse = finalOffset > maxSheetTravel * 0.38
+
+      setSheetExpanded(!shouldCollapse)
+      setDragY(0)
+      setIsDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+    }
+  }, [dragY, isDragging, maxSheetTravel])
 
   return (
     <div
@@ -76,7 +131,6 @@ export default function EventBookingPageClient({
             muted
             loop
             playsInline
-            //poster={event.coverSrc || event.flyerSrc}
             poster={event.flyerSrc || event.coverSrc}
             style={{
               width: "100%",
@@ -89,7 +143,6 @@ export default function EventBookingPageClient({
           </video>
         ) : (
           <img
-            //src={event.coverSrc || event.flyerSrc}
             src={event.flyerSrc || event.coverSrc}
             alt={event.name}
             style={{
@@ -106,7 +159,7 @@ export default function EventBookingPageClient({
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(180deg, rgba(3,7,18,0.12) 0%, rgba(3,7,18,0.18) 18%, rgba(3,7,18,0.34) 58%, rgba(3,7,18,0.74) 100%)",
+              "linear-gradient(180deg, rgba(3,7,18,0.08) 0%, rgba(3,7,18,0.12) 18%, rgba(3,7,18,0.22) 58%, rgba(3,7,18,0.52) 100%)",
           }}
         />
       </div>
@@ -154,7 +207,9 @@ export default function EventBookingPageClient({
           style={{
             display: "flex",
             justifyContent: "center",
+            alignItems: "flex-end",
             paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
+            minHeight: "58dvh",
           }}
         >
           <div
@@ -167,124 +222,203 @@ export default function EventBookingPageClient({
               boxShadow: "0 24px 50px rgba(0,0,0,0.18)",
               backdropFilter: "blur(18px)",
               WebkitBackdropFilter: "blur(18px)",
-              padding: 16,
+              overflow: "hidden",
+              transform: `translateY(${translateY}px)`,
+              transition: isDragging ? "none" : "transform 260ms ease",
+              willChange: "transform",
             }}
           >
             <div
+              onPointerDown={(e) => startDragging(e.clientY)}
               style={{
-                fontSize: 28,
-                lineHeight: 1.02,
-                fontWeight: 900,
-                letterSpacing: -0.7,
-                color: "#FFFFFF",
-                textShadow: "0 10px 18px rgba(0,0,0,0.18)",
+                padding: "10px 16px 12px",
+                cursor: isDragging ? "grabbing" : "grab",
+                userSelect: "none",
+                touchAction: "none",
               }}
             >
-              {event.name}
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                lineHeight: 1.5,
-                color: "rgba(255,255,255,0.88)",
-                fontWeight: 700,
-              }}
-            >
-              {formatDisplayDate(event.date)} · {event.timeLabel}
-            </div>
-
-            <div
-              style={{
-                marginTop: 2,
-                fontSize: 13,
-                lineHeight: 1.45,
-                color: "rgba(255,255,255,0.72)",
-              }}
-            >
-              {event.venueName}
-            </div>
-
-            {event.description ? (
               <div
                 style={{
-                  marginTop: 10,
+                  width: 54,
+                  height: 5,
+                  borderRadius: 999,
+                  margin: "0 auto 12px",
+                  background: "rgba(255,255,255,0.52)",
+                }}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 26,
+                      lineHeight: 1.02,
+                      fontWeight: 900,
+                      letterSpacing: -0.7,
+                      color: "#FFFFFF",
+                      textShadow: "0 10px 18px rgba(0,0,0,0.18)",
+                    }}
+                  >
+                    {event.name}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 14,
+                      lineHeight: 1.5,
+                      color: "rgba(255,255,255,0.88)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {formatDisplayDate(event.date)} · {event.timeLabel}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 13,
+                      lineHeight: 1.45,
+                      color: "rgba(255,255,255,0.72)",
+                    }}
+                  >
+                    {event.venueName}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSheetExpanded((prev) => !prev)
+                    setDragY(0)
+                    setIsDragging(false)
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.24)",
+                    background: "rgba(255,255,255,0.12)",
+                    color: "#FFFFFF",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "10px 12px",
+                    cursor: "pointer",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                  }}
+                >
+                  {sheetExpanded ? "Show flyer" : "Show details"}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  gap: 10,
+                }}
+              >
+                {event.hasTickets ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/book/event/${event.slug}/tickets`)}
+                    style={{
+                      flex: 1,
+                      height: 46,
+                      borderRadius: 16,
+                      border: "none",
+                      background: "linear-gradient(135deg, #60A5FA 0%, #38BDF8 100%)",
+                      color: "#FFFFFF",
+                      fontSize: 14,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                      boxShadow: "0 10px 20px rgba(96,165,250,0.20)",
+                    }}
+                  >
+                    View Tickets
+                  </button>
+                ) : null}
+
+                {event.hasTables ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenMap}
+                    style={{
+                      flex: 1,
+                      height: 46,
+                      borderRadius: 16,
+                      border: "1px solid rgba(255,255,255,0.32)",
+                      background: "rgba(255,255,255,0.14)",
+                      color: "#FFFFFF",
+                      fontSize: 14,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                    }}
+                  >
+                    Explore Map
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div
+              style={{
+                maxHeight: isCollapsed ? 0 : 260,
+                opacity: isCollapsed ? 0 : 1,
+                overflow: "hidden",
+                transition:
+                  "max-height 260ms ease, opacity 180ms ease, padding 260ms ease, margin 260ms ease",
+                padding: isCollapsed ? "0 16px" : "0 16px 16px",
+              }}
+            >
+              {event.description ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: "rgba(255,255,255,0.78)",
+                  }}
+                >
+                  {event.description}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  marginTop: event.description ? 12 : 0,
                   fontSize: 13,
-                  lineHeight: 1.5,
+                  lineHeight: 1.45,
                   color: "rgba(255,255,255,0.78)",
                 }}
               >
-                {event.description}
+                {ticketCount} ticket options ·{" "}
+                {startPrice === 0
+                  ? "From Free"
+                  : startPrice !== null
+                    ? `From $${startPrice}`
+                    : "Unavailable"}
               </div>
-            ) : null}
-
-            <div
-              style={{
-                marginTop: 12,
-                fontSize: 13,
-                lineHeight: 1.45,
-                color: "rgba(255,255,255,0.78)",
-              }}
-            >
-              {ticketCount} ticket options ·{" "}
-              {startPrice === 0
-                ? "From Free"
-                : startPrice !== null
-                  ? `From $${startPrice}`
-                  : "Unavailable"}
             </div>
 
             <div
               style={{
-                display: "flex",
-                gap: 10,
-                marginTop: 14,
+                height: isCollapsed ? Math.max(0, collapsedPeekHeight - 118) : 0,
+                transition: "height 260ms ease",
               }}
-            >
-              {event.hasTickets ? (
-                <button
-                  type="button"
-                  onClick={() => router.push(`/book/event/${event.slug}/tickets`)}
-                  style={{
-                    flex: 1,
-                    height: 46,
-                    borderRadius: 16,
-                    border: "none",
-                    background: "linear-gradient(135deg, #60A5FA 0%, #38BDF8 100%)",
-                    color: "#FFFFFF",
-                    fontSize: 14,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    boxShadow: "0 10px 20px rgba(96,165,250,0.20)",
-                  }}
-                >
-                  View Tickets
-                </button>
-              ) : null}
-
-              {event.hasTables ? (
-                <button
-                  type="button"
-                  onClick={handleOpenMap}
-                  style={{
-                    flex: 1,
-                    height: 46,
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.32)",
-                    background: "rgba(255,255,255,0.14)",
-                    color: "#FFFFFF",
-                    fontSize: 14,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                  }}
-                >
-                  Explore Map
-                </button>
-              ) : null}
-            </div>
+            />
           </div>
         </div>
       </div>

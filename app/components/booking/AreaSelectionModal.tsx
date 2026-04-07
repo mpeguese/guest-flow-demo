@@ -1,5 +1,6 @@
 // app/components/booking/AreaSelectionModal.tsx
 "use client"
+import { useEffect, useState } from "react"
 
 type AreaSelectionModalProps = {
   open: boolean
@@ -11,6 +12,7 @@ type AreaSelectionModalProps = {
   dateLabel: string
   partySizeLabel: string
   sessionLabel: string
+  expiresAt?: string | null
   videoSrc: string
   posterSrc?: string
 }
@@ -36,6 +38,29 @@ const COLORS = {
   coralSoft: "#FFE7E0",
 }
 
+// INSERT THE HELPER FUNCTION HERE
+
+function getCountdown(expiresAt?: string | null) {
+  if (!expiresAt) {
+    return {
+      expired: true,
+      minutes: "00",
+      seconds: "00",
+      totalMs: 0,
+    }
+  }
+
+  const diff = new Date(expiresAt).getTime() - Date.now()
+  const totalMs = Math.max(0, diff)
+
+  return {
+    expired: totalMs <= 0,
+    minutes: String(Math.floor(totalMs / 1000 / 60)).padStart(2, "0"),
+    seconds: String(Math.floor((totalMs / 1000) % 60)).padStart(2, "0"),
+    totalMs,
+  }
+}
+
 export default function AreaSelectionModal({
   open,
   onClose,
@@ -46,9 +71,28 @@ export default function AreaSelectionModal({
   dateLabel,
   partySizeLabel,
   sessionLabel,
+  expiresAt,
   videoSrc,
   posterSrc,
 }: AreaSelectionModalProps) {
+  
+
+  const [countdown, setCountdown] = useState(() => getCountdown(expiresAt))
+
+  useEffect(() => {
+    setCountdown(getCountdown(expiresAt))
+
+    if (!expiresAt) return
+
+    const interval = window.setInterval(() => {
+      setCountdown(getCountdown(expiresAt))
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [expiresAt])
+
+  const isExpired = countdown.expired
+
   if (!open) return null
 
   const productImageSrc = "/images/table-preview.jpg"
@@ -245,6 +289,7 @@ export default function AreaSelectionModal({
           ))} */}
         </div>
       </div>
+      
 
       <div
         style={{
@@ -265,15 +310,17 @@ export default function AreaSelectionModal({
       >
         <button
           onClick={onAddToCart}
+          disabled={isExpired}
           style={{
             height: 54,
             border: `1px solid ${COLORS.border}`,
             borderRadius: 18,
-            background: COLORS.card,
-            color: COLORS.text,
+            background: isExpired ? "#E5E7EB" : COLORS.card,
+            color: isExpired ? COLORS.textMuted : COLORS.text,
             fontWeight: 800,
             fontSize: 15,
-            cursor: "pointer",
+            cursor: isExpired ? "not-allowed" : "pointer",
+            opacity: isExpired ? 0.72 : 1,
           }}
         >
           Add to cart
@@ -281,19 +328,27 @@ export default function AreaSelectionModal({
 
         <button
           onClick={onCheckout}
+          disabled={isExpired}
           style={{
             height: 54,
             border: "none",
             borderRadius: 18,
-            background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+            background: isExpired
+              ? "#CBD5E1"
+              : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
             color: "#FFFFFF",
             fontWeight: 900,
             fontSize: 15,
-            cursor: "pointer",
-            boxShadow: "0 12px 24px rgba(14,165,233,0.24)",
+            cursor: isExpired ? "not-allowed" : "pointer",
+            boxShadow: isExpired ? "none" : "0 12px 24px rgba(14,165,233,0.24)",
+            opacity: isExpired ? 0.86 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
           }}
         >
-          Checkout
+          {isExpired ? "Expired" : `Checkout • ${countdown.minutes}:${countdown.seconds}`}
         </button>
       </div>
     </div>

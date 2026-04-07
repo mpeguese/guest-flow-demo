@@ -22,10 +22,11 @@ export type BookingCartItem = {
   session: string
   price: number
   imageSrc?: string
-
+  
   reservationId?: string
   holdToken?: string
   expiresAt?: string
+  eventSlug?: string
 }
 
 const STORAGE_KEY = "gf-booking-cart-v1"

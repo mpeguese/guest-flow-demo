@@ -33,6 +33,27 @@ function money(value: number) {
   }).format(value)
 }
 
+function getCountdown(expiresAt?: string | null) {
+  if (!expiresAt) {
+    return {
+      expired: true,
+      minutes: "00",
+      seconds: "00",
+      totalMs: 0,
+    }
+  }
+
+  const diff = new Date(expiresAt).getTime() - Date.now()
+  const totalMs = Math.max(0, diff)
+
+  return {
+    expired: totalMs <= 0,
+    minutes: String(Math.floor(totalMs / 1000 / 60)).padStart(2, "0"),
+    seconds: String(Math.floor((totalMs / 1000) % 60)).padStart(2, "0"),
+    totalMs,
+  }
+}
+
 const COLORS = {
   bg: "#FFFFFF",
   bgSoft: "#F7FBFC",
@@ -119,12 +140,58 @@ function CartIconLarge() {
 
 export default function CartPage() {
   const router = useRouter()
-  const { items, removeItem, cartCount, subtotal } = useBookingCart()
+  const { items, removeItem, cartCount, subtotal } = useBookingCart() 
 
   const [promoCode, setPromoCode] = useState("")
   const [promoInput, setPromoInput] = useState("")
   const [promoOpen, setPromoOpen] = useState(false)
   const [promoError, setPromoError] = useState("")
+
+  const [lastMapHref, setLastMapHref] = useState("/book/map")
+
+  const activeZoneHoldExpiresAt = useMemo(() => {
+    const now = Date.now()
+
+    const activeZoneItems = items
+      .filter((item) => inferItemType(item) === "zone" && item.expiresAt)
+      .filter((item) => {
+        const ms = new Date(item.expiresAt as string).getTime()
+        return Number.isFinite(ms) && ms > now
+      })
+
+    if (!activeZoneItems.length) return null
+
+    const sorted = [...activeZoneItems].sort((a, b) => {
+      return (
+        new Date(a.expiresAt as string).getTime() -
+        new Date(b.expiresAt as string).getTime()
+      )
+    })
+
+    return sorted[0]?.expiresAt || null
+  }, [items])
+
+  const [holdCountdown, setHoldCountdown] = useState(() =>
+    getCountdown(activeZoneHoldExpiresAt)
+  )
+
+  useEffect(() => {
+    setHoldCountdown(getCountdown(activeZoneHoldExpiresAt))
+
+    if (!activeZoneHoldExpiresAt) return
+
+    const interval = window.setInterval(() => {
+      setHoldCountdown(getCountdown(activeZoneHoldExpiresAt))
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [activeZoneHoldExpiresAt])
+
+  const hasAnyHeldZoneItems = items.some(
+  (item) => inferItemType(item) === "zone" && !!item.expiresAt
+)
+
+  const isZoneHoldExpired = hasAnyHeldZoneItems && !activeZoneHoldExpiresAt
 
   useEffect(() => {
     const storedCode = getStoredPromoCode()
@@ -134,6 +201,15 @@ export default function CartPage() {
       setPromoOpen(true)
     }
   }, [])
+
+  useEffect(() => {
+  if (typeof window === "undefined") return
+
+  const stored = window.sessionStorage.getItem("gf-last-map-href")
+  if (stored) {
+    setLastMapHref(stored)
+  }
+}, [])
 
   const pricing = useMemo(
     () => calculateBookingPricing(subtotal, promoCode),
@@ -149,6 +225,26 @@ export default function CartPage() {
     () => items.filter((item) => inferItemType(item) === "pass").length,
     [items]
   )
+
+  const addAnotherItemHref = useMemo(() => {
+  const sourceItem =
+    items.find((item) => inferItemType(item) === "zone") || items[0]
+
+  if (!sourceItem) return lastMapHref
+
+  const params = new URLSearchParams()
+
+  if (sourceItem.date) {
+    params.set("date", sourceItem.date)
+  }
+
+  if (sourceItem.eventSlug) {
+    params.set("event", sourceItem.eventSlug)
+  }
+
+  const query = params.toString()
+  return query ? `/book/map?${query}` : lastMapHref
+}, [items, lastMapHref])
 
   function handleApplyPromo() {
     const normalized = normalizePromoCode(promoInput)
@@ -175,6 +271,36 @@ export default function CartPage() {
     setPromoError("")
     clearStoredPromoCode()
   }
+
+  async function handleRemoveCartItem(item: (typeof items)[number]) {
+  const isZone = inferItemType(item) === "zone"
+
+  try {
+    if (isZone && item.reservationId) {
+      const response = await fetch("/api/reservations/release", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reservationId: item.reservationId,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        console.error(
+          "Failed to release reservation hold:",
+          data?.error || response.statusText
+        )
+      }
+    }
+  } catch (error) {
+    console.error("Error releasing cart reservation:", error)
+  } finally {
+    removeItem(item.id)
+  }
+}
 
   return (
     <MobileShell>
@@ -306,7 +432,8 @@ export default function CartPage() {
               </div>
 
               <button
-                onClick={() => router.push("/book/map")}
+                //onClick={() => router.push("/book/map")}
+                onClick={() => router.push(lastMapHref)}
                 style={{
                   marginTop: 24,
                   height: 52,
@@ -516,7 +643,7 @@ export default function CartPage() {
                           </div>
 
                           <button
-                            onClick={() => removeItem(item.id)}
+                            onClick={() => handleRemoveCartItem(item)}
                             style={{
                               border: "none",
                               background: "transparent",
@@ -806,7 +933,7 @@ export default function CartPage() {
                   }}
                 >
                   <button
-                    onClick={() => router.push("/book/map")}
+                    onClick={() => router.push(addAnotherItemHref)}
                     style={{
                       height: 54,
                       border: `1px solid ${COLORS.border}`,
@@ -822,20 +949,37 @@ export default function CartPage() {
                   </button>
 
                   <button
-                    onClick={() => router.push("/book/details")}
+                    onClick={() => {
+                      if (isZoneHoldExpired) return
+                      router.push("/book/details")
+                    }}
+                    disabled={isZoneHoldExpired}
                     style={{
                       height: 54,
                       border: "none",
                       borderRadius: 18,
-                      background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                      background: isZoneHoldExpired
+                        ? "#CBD5E1"
+                        : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
                       color: "#fff",
                       fontWeight: 800,
                       fontSize: 15,
-                      cursor: "pointer",
-                      boxShadow: "0 12px 24px rgba(14,165,233,0.24)",
+                      cursor: isZoneHoldExpired ? "not-allowed" : "pointer",
+                      boxShadow: isZoneHoldExpired
+                        ? "none"
+                        : "0 12px 24px rgba(14,165,233,0.24)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      opacity: isZoneHoldExpired ? 0.86 : 1,
                     }}
                   >
-                    Continue to payment
+                    {activeZoneHoldExpiresAt
+                      ? isZoneHoldExpired
+                        ? "Expired"
+                        : `Payment • ${holdCountdown.minutes}:${holdCountdown.seconds}`
+                      : "Payment"}
                   </button>
                 </div>
               </div>

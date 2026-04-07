@@ -29,6 +29,27 @@ function money(value: number) {
   }).format(value)
 }
 
+function getCountdown(expiresAt?: string | null) {
+  if (!expiresAt) {
+    return {
+      expired: true,
+      minutes: "00",
+      seconds: "00",
+      totalMs: 0,
+    }
+  }
+
+  const diff = new Date(expiresAt).getTime() - Date.now()
+  const totalMs = Math.max(0, diff)
+
+  return {
+    expired: totalMs <= 0,
+    minutes: String(Math.floor(totalMs / 1000 / 60)).padStart(2, "0"),
+    seconds: String(Math.floor((totalMs / 1000) % 60)).padStart(2, "0"),
+    totalMs,
+  }
+}
+
 export default function DetailsPage() {
   const router = useRouter()
   const { items, cartCount, subtotal } = useBookingCart()
@@ -47,6 +68,50 @@ export default function DetailsPage() {
   const [clientSecret, setClientSecret] = useState("")
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
+
+  const activeZoneHoldExpiresAt = useMemo(() => {
+  const now = Date.now()
+
+  const activeZoneItems = items
+    .filter((item) => (item.itemType || "zone") === "zone" && item.expiresAt)
+    .filter((item) => {
+      const ms = new Date(item.expiresAt as string).getTime()
+      return Number.isFinite(ms) && ms > now
+    })
+
+  if (!activeZoneItems.length) return null
+
+  const sorted = [...activeZoneItems].sort((a, b) => {
+    return (
+      new Date(a.expiresAt as string).getTime() -
+      new Date(b.expiresAt as string).getTime()
+    )
+  })
+
+  return sorted[0]?.expiresAt || null
+}, [items])
+
+const [holdCountdown, setHoldCountdown] = useState(() =>
+  getCountdown(activeZoneHoldExpiresAt)
+)
+
+useEffect(() => {
+  setHoldCountdown(getCountdown(activeZoneHoldExpiresAt))
+
+  if (!activeZoneHoldExpiresAt) return
+
+  const interval = window.setInterval(() => {
+    setHoldCountdown(getCountdown(activeZoneHoldExpiresAt))
+  }, 1000)
+
+  return () => window.clearInterval(interval)
+}, [activeZoneHoldExpiresAt])
+
+const hasAnyHeldZoneItems = items.some(
+  (item) => (item.itemType || "zone") === "zone" && !!item.expiresAt
+)
+
+const isZoneHoldExpired = hasAnyHeldZoneItems && !activeZoneHoldExpiresAt
 
   const zoneCount = items.filter((item) => (item.itemType || "zone") === "zone").length
   const passCount = items.filter((item) => item.itemType === "pass").length
@@ -139,9 +204,11 @@ export default function DetailsPage() {
 
   useEffect(() => {
     if (cartCount === 0) return
+    if (isZoneHoldExpired) return
+
     initializeCheckout()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartCount, promoCode])
+  }, [cartCount, promoCode, isZoneHoldExpired])
 
   if (cartCount === 0) {
     return (
@@ -278,6 +345,18 @@ export default function DetailsPage() {
                 : ""}
               .
             </p>
+            {activeZoneHoldExpiresAt ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: "#92400E",
+                }}
+              >
+                Location hold • {holdCountdown.minutes}:{holdCountdown.seconds}
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -488,7 +567,76 @@ export default function DetailsPage() {
               boxShadow: "0 14px 30px rgba(15,23,42,0.06)",
             }}
           >
-            {isLoadingCheckout ? (
+            {isZoneHoldExpired ? (
+            <>
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "12px 14px",
+                borderRadius: 14,
+                background: "#FEF2F2",
+                border: "1px solid #FECACA",
+                color: "#B91C1C",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              Your held location expired before checkout could be completed.
+            </div>
+
+            <div
+              style={{
+                marginBottom: 14,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#475569",
+              }}
+            >
+              Return to the cart or map to select the location again. Passes can still remain in your cart.
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 10,
+              }}
+            >
+              <button
+                onClick={() => router.push("/book/cart")}
+                style={{
+                  height: 54,
+                  border: "1px solid #E2E8F0",
+                  borderRadius: 18,
+                  background: "#FFFFFF",
+                  color: "#0F172A",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Back to cart
+              </button>
+
+              <button
+                onClick={() => router.push("/book/map")}
+                style={{
+                  height: 54,
+                  border: "none",
+                  borderRadius: 18,
+                  background: "#2563EB",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: "pointer",
+                  boxShadow: "0 12px 24px rgba(37,99,235,0.24)",
+                }}
+              >
+                Select again
+              </button>
+            </div>
+          </>
+            ) : isLoadingCheckout ? ( 
               <div
                 style={{
                   minHeight: 180,

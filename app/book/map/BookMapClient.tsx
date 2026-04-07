@@ -1719,6 +1719,24 @@ export default function BookMapPage() {
     return () => window.clearTimeout(timeout)
   }, [cartMessage])
 
+  useEffect(() => {
+  if (typeof window === "undefined") return
+
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set("date", date)
+  }
+
+  if (eventSlug) {
+    params.set("event", eventSlug)
+  }
+
+  const href = params.toString() ? `/book/map?${params.toString()}` : "/book/map"
+
+  window.sessionStorage.setItem("gf-last-map-href", href)
+}, [date, eventSlug])
+
   function buildFrozenSelectionFromCurrent(): FrozenSelection | null {
   if (!selectedZone || !selectedZonePurchasable) return null
 
@@ -1949,6 +1967,7 @@ export default function BookMapPage() {
       reservationId: selectionDraft.reservationId,
       holdToken: selectionDraft.holdToken,
       expiresAt: selectionDraft.expiresAt,
+      eventSlug: eventSlug || undefined,
     })
 
       if (result.added) {
@@ -1981,6 +2000,7 @@ export default function BookMapPage() {
       reservationId: selectionDraft.reservationId,
       holdToken: selectionDraft.holdToken,
       expiresAt: selectionDraft.expiresAt,
+      eventSlug: eventSlug || undefined,
     })
       setSelectionModalOpen(false)
       setSelectionDraft(null)
@@ -2565,6 +2585,7 @@ export default function BookMapPage() {
           dateLabel={formatDisplayDate(selectionDraft?.date || date)}
           partySizeLabel={selectionDraft?.partySize || "Party size not set"}
           sessionLabel={(selectionDraft?.session || "Not set").toUpperCase()}
+          expiresAt={selectionDraft?.expiresAt || null}
           videoSrc="/videos/venue-party-bg.mp4"
           posterSrc="/images/checkout-poster.jpg"
         />
