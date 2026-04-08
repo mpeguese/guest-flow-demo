@@ -9,24 +9,23 @@ export default function AdminLoginPage() {
       <style jsx>{`
         .admin-login-page {
           min-height: 100vh;
-          background: linear-gradient(
-            180deg,
-            #f8fcff 0%,
-            #eef8ff 46%,
-            #fff5e8 100%
-          );
+          background:
+            radial-gradient(circle at top left, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0) 28%),
+            radial-gradient(circle at bottom right, rgba(251, 191, 36, 0.16) 0%, rgba(251, 191, 36, 0) 24%),
+            linear-gradient(180deg, #f8fcff 0%, #eef8ff 46%, #fff5e8 100%);
           color: #0f172a;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 32px 20px;
+          box-sizing: border-box;
         }
 
         .admin-login-shell {
           width: 100%;
-          max-width: 1180px;
+          max-width: 1140px;
           display: grid;
-          grid-template-columns: 1.02fr 0.98fr;
+          grid-template-columns: 1fr 0.98fr;
           gap: 28px;
           align-items: stretch;
         }
@@ -44,7 +43,7 @@ export default function AdminLoginPage() {
           );
           box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
           position: relative;
-          min-height: 690px;
+          min-height: 680px;
         }
 
         .intro-overlay {
@@ -94,7 +93,7 @@ export default function AdminLoginPage() {
         }
 
         .intro-copy {
-          margin-top: 20px;
+          margin-top: 18px;
           max-width: 500px;
           font-size: 17px;
           line-height: 1.65;
@@ -149,6 +148,14 @@ export default function AdminLoginPage() {
           margin: 0 auto;
         }
 
+        .top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+
         .gf-mark {
           width: 58px;
           height: 58px;
@@ -161,6 +168,13 @@ export default function AdminLoginPage() {
           font-weight: 900;
           letter-spacing: -0.5px;
           box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+        }
+
+        .back-link {
+          font-size: 14px;
+          font-weight: 800;
+          color: #0f766e;
+          text-decoration: none;
         }
 
         .login-title {
@@ -179,7 +193,7 @@ export default function AdminLoginPage() {
         }
 
         .field-wrap {
-          margin-top: 26px;
+          margin-top: 24px;
         }
 
         .field-wrap + .field-wrap {
@@ -256,51 +270,25 @@ export default function AdminLoginPage() {
           box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
         }
 
-        .secondary-btn {
-          margin-top: 14px;
-          width: 100%;
-          height: 58px;
-          border-radius: 18px;
-          border: 1px solid rgba(148, 163, 184, 0.24);
-          background: #ffffff;
-          color: #0f172a;
-          font-size: 15px;
-          font-weight: 800;
-          cursor: pointer;
-          display: inline-flex;
+        .secondary-row {
+          margin-top: 16px;
+          display: flex;
           align-items: center;
-          justify-content: center;
-          text-decoration: none;
-          box-sizing: border-box;
-        }
-
-        .login-meta {
-          margin-top: 24px;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
+          justify-content: space-between;
           gap: 12px;
+          flex-wrap: wrap;
         }
 
-        .login-meta-card {
-          border-radius: 20px;
-          background: #f8fafc;
-          border: 1px solid rgba(148, 163, 184, 0.16);
-          padding: 16px;
-        }
-
-        .login-meta-label {
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 1.4px;
-          text-transform: uppercase;
-          color: #94a3b8;
-        }
-
-        .login-meta-value {
-          margin-top: 8px;
+        .secondary-link {
           font-size: 14px;
           font-weight: 800;
-          color: #0f172a;
+          color: #0f766e;
+          text-decoration: none;
+        }
+
+        .muted {
+          font-size: 14px;
+          color: #64748b;
         }
 
         @media (max-width: 980px) {
@@ -353,10 +341,6 @@ export default function AdminLoginPage() {
             font-size: 30px;
             letter-spacing: -0.9px;
           }
-
-          .login-meta {
-            grid-template-columns: 1fr;
-          }
         }
 
         @media (max-width: 560px) {
@@ -396,13 +380,13 @@ export default function AdminLoginPage() {
           }
 
           .field-input,
-          .primary-btn,
-          .secondary-btn {
+          .primary-btn {
             height: 54px;
             border-radius: 16px;
           }
 
-          .login-row {
+          .login-row,
+          .secondary-row {
             align-items: flex-start;
             flex-direction: column;
           }
@@ -411,7 +395,6 @@ export default function AdminLoginPage() {
 
       <div className="admin-login-page">
         <div className="admin-login-shell">
-          {/* Left Brand / Intro Panel */}
           <section className="intro-panel">
             <div className="intro-overlay" />
 
@@ -420,36 +403,36 @@ export default function AdminLoginPage() {
                 <div className="intro-badge">GuestFlow Admin</div>
 
                 <div className="intro-title">
-                  Run doors,
+                  Back to
                   <br />
-                  tables, and
+                  your live
                   <br />
-                  guest flow.
+                  operation.
                 </div>
 
                 <div className="intro-copy">
-                  A premium operations portal for venue managers, door teams,
-                  hosts, and staff to monitor event activity in real time.
+                  Sign in to manage events, tables, check-ins, staff activity,
+                  and nightly flow.
                 </div>
               </div>
 
               <div className="intro-stats">
                 {[
                   {
-                    label: "Live Operations",
-                    value: "Tickets, tables, check-ins",
+                    label: "Live Ops",
+                    value: "Doors, tables, and guest flow",
                   },
                   {
-                    label: "Fast Validation",
-                    value: "QR scan and manual lookup",
+                    label: "Check-In",
+                    value: "Fast scan and lookup",
                   },
                   {
-                    label: "Sales Visibility",
-                    value: "Revenue, scans, exceptions",
+                    label: "Visibility",
+                    value: "Sales, scans, and exceptions",
                   },
                   {
-                    label: "Staff Ready",
-                    value: "Built for event nights",
+                    label: "Built For",
+                    value: "Nightly venue operations",
                   },
                 ].map((item) => (
                   <div key={item.label} className="intro-stat">
@@ -461,16 +444,19 @@ export default function AdminLoginPage() {
             </div>
           </section>
 
-          {/* Right Login Panel */}
           <section className="login-panel">
             <div className="login-inner">
-              <div className="gf-mark">GF</div>
+              <div className="top-row">
+                <div className="gf-mark">GF</div>
+                <Link href="/admin" className="back-link">
+                  Back
+                </Link>
+              </div>
 
-              <div className="login-title">Welcome back</div>
+              <div className="login-title">Sign in</div>
 
               <div className="login-copy">
-                Sign in to access GuestFlow Admin and manage live venue
-                operations.
+                Access your GuestFlow Admin workspace.
               </div>
 
               <div className="field-wrap">
@@ -502,20 +488,11 @@ export default function AdminLoginPage() {
 
               <button className="primary-btn">Sign In</button>
 
-              <Link href="/admin/dashboard" className="secondary-btn">
-                Demo Dashboard
-              </Link>
-
-              <div className="login-meta">
-                <div className="login-meta-card">
-                  <div className="login-meta-label">Access</div>
-                  <div className="login-meta-value">Live Ops + Sales</div>
-                </div>
-
-                <div className="login-meta-card">
-                  <div className="login-meta-label">Role</div>
-                  <div className="login-meta-value">Business Admin</div>
-                </div>
+              <div className="secondary-row">
+                <div className="muted">New to GuestFlow Admin?</div>
+                <Link href="/admin" className="secondary-link">
+                  Start setup
+                </Link>
               </div>
             </div>
           </section>

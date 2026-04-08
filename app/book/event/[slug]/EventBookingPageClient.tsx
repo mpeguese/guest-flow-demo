@@ -35,6 +35,31 @@ function BackIcon() {
   )
 }
 
+function InfoIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="4.5" r="2.5" fill="currentColor" />
+      <rect
+        x="10.45"
+        y="10.15"
+        width="3.1"
+        height="10.2"
+        rx="1.55"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+      />
+    </svg>
+  )
+}
+
 export default function EventBookingPageClient({
   event,
   ticketCount,
@@ -46,7 +71,7 @@ export default function EventBookingPageClient({
 }) {
   const router = useRouter()
 
-  const [sheetExpanded, setSheetExpanded] = useState(true)
+  const [sheetExpanded, setSheetExpanded] = useState(false)
   const [dragY, setDragY] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
 
@@ -295,6 +320,8 @@ export default function EventBookingPageClient({
 
                 <button
                   type="button"
+                  aria-label={sheetExpanded ? "Hide details" : "Show details"}
+                  title={sheetExpanded ? "Hide details" : "Show details"}
                   onPointerDown={(e) => {
                     e.stopPropagation()
                   }}
@@ -305,20 +332,21 @@ export default function EventBookingPageClient({
                     setIsDragging(false)
                   }}
                   style={{
+                    width: 38,
+                    height: 38,
                     flexShrink: 0,
                     borderRadius: 999,
                     border: "1px solid rgba(255,255,255,0.24)",
                     background: "rgba(255,255,255,0.12)",
                     color: "#FFFFFF",
-                    fontSize: 12,
-                    fontWeight: 800,
-                    padding: "10px 12px",
+                    display: "grid",
+                    placeItems: "center",
                     cursor: "pointer",
                     backdropFilter: "blur(10px)",
                     WebkitBackdropFilter: "blur(10px)",
                   }}
                 >
-                  {sheetExpanded ? "Show flyer" : "Show details"}
+                  <InfoIcon />
                 </button>
               </div>
 
@@ -379,9 +407,8 @@ export default function EventBookingPageClient({
                 maxHeight: isCollapsed ? 0 : 260,
                 opacity: isCollapsed ? 0 : 1,
                 overflow: "hidden",
-                transition:
-                  "max-height 260ms ease, opacity 180ms ease, padding 260ms ease, margin 260ms ease",
-                padding: isCollapsed ? "0 16px" : "0 16px 16px",
+                transition: "max-height 220ms ease, opacity 180ms ease",
+                padding: "0 16px 16px",
               }}
             >
               {event.description ? (
