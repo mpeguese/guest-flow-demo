@@ -1,3 +1,4 @@
+// app/admin/page.tsx
 "use client"
 
 import Link from "next/link"
@@ -181,7 +182,8 @@ export default function AdminEntryPage() {
     signinLink: {
       fontSize: 14,
       fontWeight: 800,
-      color: "rgba(255,255,255,0.92)",
+      //color: "rgba(255,255,255,0.92)",
+      color: "#2563eb",
       textDecoration: "none",
     },
     title: {
@@ -436,10 +438,18 @@ export default function AdminEntryPage() {
             <div style={styles.heroTop}>
               <div style={styles.topRow}>
                 <div style={styles.badge}>GuestFlow Admin</div>
-
-                <Link href="/admin/login" style={styles.signinLink}>
-                  Already have an account? Sign in
-                </Link>
+                <div 
+                    style={{marginTop: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    flexWrap: "wrap",}}
+                    >
+                   Already have an account?
+                  <Link href="/admin/login" style={{fontWeight: 800, color: "#2563eb",}}>Sign in</Link>
+                </div>
+                
               </div>
 
               <div style={styles.title}>
