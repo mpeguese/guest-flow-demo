@@ -1,7 +1,9 @@
+// app/admin/signup/AdminSignupClient.tsx
 "use client"
 
 import Link from "next/link"
-import type { CSSProperties } from "react"
+import { useRouter } from "next/navigation"
+import { useState, type CSSProperties, type FormEvent } from "react"
 
 type SignupContent = {
   badge: string
@@ -10,11 +12,52 @@ type SignupContent = {
   summary: string
 }
 
+type IntentType = "event" | "venue" | "hybrid"
+
+function getIntentFromUrl(): IntentType {
+  if (typeof window === "undefined") return "event"
+
+  const params = new URLSearchParams(window.location.search)
+  const rawIntent = (params.get("intent") || "").trim().toLowerCase()
+
+  if (rawIntent === "venue") return "venue"
+  if (rawIntent === "hybrid") return "hybrid"
+  return "event"
+}
+
+function getIntentRoute(intent: IntentType) {
+  switch (intent) {
+    case "venue":
+      return "/admin/signup/venue/create"
+    case "hybrid":
+      return "/admin/signup/hybrid/create"
+    case "event":
+    default:
+      return "/admin/signup/event/create"
+  }
+}
+
 export default function AdminSignupClient({
   content,
 }: {
   content: SignupContent
 }) {
+  const router = useRouter()
+
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    const intent = getIntentFromUrl()
+    const route = getIntentRoute(intent)
+
+    router.push(route)
+  }
+
   const styles: Record<string, CSSProperties> = {
     page: {
       minHeight: "100vh",
@@ -186,8 +229,34 @@ export default function AdminSignupClient({
 
   return (
     <div style={styles.page}>
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .admin-signup-card {
+            padding: 24px !important;
+            border-radius: 28px !important;
+          }
+
+          .admin-signup-title {
+            font-size: 32px !important;
+          }
+
+          .admin-signup-subtitle {
+            font-size: 16px !important;
+          }
+
+          .admin-signup-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+
+          .admin-signup-full {
+            grid-column: auto !important;
+          }
+        }
+      `}</style>
+
       <div style={styles.shell}>
-        <section style={styles.card}>
+        <section style={styles.card} className="admin-signup-card">
           <div style={styles.topRow}>
             <div style={styles.gfMark}>GF</div>
             <Link href="/admin" style={styles.backLink}>
@@ -197,33 +266,65 @@ export default function AdminSignupClient({
 
           <div style={styles.intentBadge}>{content.badge}</div>
 
-          <div style={styles.title}>{content.title}</div>
-          <div style={styles.subtitle}>{content.subtitle}</div>
+          <div style={styles.title} className="admin-signup-title">
+            {content.title}
+          </div>
+          <div style={styles.subtitle} className="admin-signup-subtitle">
+            {content.subtitle}
+          </div>
           <div style={styles.summary}>{content.summary}</div>
 
-          <div style={styles.formGrid}>
-            <div>
-              <label style={styles.fieldLabel}>First Name</label>
-              <input style={styles.fieldInput} type="text" placeholder="First name" />
+          <form onSubmit={handleSubmit}>
+            <div style={styles.formGrid} className="admin-signup-grid">
+              <div>
+                <label style={styles.fieldLabel}>First Name</label>
+                <input
+                  style={styles.fieldInput}
+                  type="text"
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={styles.fieldLabel}>Last Name</label>
+                <input
+                  style={styles.fieldInput}
+                  type="text"
+                  placeholder="Last name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </div>
+
+              <div style={styles.fieldWrapFull} className="admin-signup-full">
+                <label style={styles.fieldLabel}>Email</label>
+                <input
+                  style={styles.fieldInput}
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div style={styles.fieldWrapFull} className="admin-signup-full">
+                <label style={styles.fieldLabel}>Password</label>
+                <input
+                  style={styles.fieldInput}
+                  type="password"
+                  placeholder="Create a password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
             </div>
 
-            <div>
-              <label style={styles.fieldLabel}>Last Name</label>
-              <input style={styles.fieldInput} type="text" placeholder="Last name" />
-            </div>
-
-            <div style={styles.fieldWrapFull}>
-              <label style={styles.fieldLabel}>Email</label>
-              <input style={styles.fieldInput} type="email" placeholder="you@example.com" />
-            </div>
-
-            <div style={styles.fieldWrapFull}>
-              <label style={styles.fieldLabel}>Password</label>
-              <input style={styles.fieldInput} type="password" placeholder="Create a password" />
-            </div>
-          </div>
-
-          <button style={styles.primaryBtn}>Continue</button>
+            <button type="submit" style={styles.primaryBtn}>
+              Continue
+            </button>
+          </form>
 
           <div style={styles.intentNote}>
             <div style={styles.intentNoteLabel}>Selected Path</div>

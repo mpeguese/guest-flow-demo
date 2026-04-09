@@ -336,7 +336,7 @@ export default function AdminEntryPage() {
       background: "rgba(255, 255, 255, 0.96)",
       color: "#0f172a",
       textDecoration: "none",
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: 900,
       letterSpacing: "-0.2px",
       boxShadow: "0 10px 22px rgba(15, 23, 42, 0.14)",
@@ -538,7 +538,7 @@ export default function AdminEntryPage() {
 
                             <div style={styles.cardFooter}>
                               <Link href={option.href} style={styles.nextBtn}>
-                                Next
+                                Continue Setup
                               </Link>
                             </div>
                           </div>
@@ -569,9 +569,9 @@ export default function AdminEntryPage() {
                     Selected: {activeOption.eyebrow}
                   </div>
 
-                  <Link href={activeOption.href} style={styles.footerLink}>
+                  {/* <Link href={activeOption.href} style={styles.footerLink}>
                     Continue setup
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
             </div>
