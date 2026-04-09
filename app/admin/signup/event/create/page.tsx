@@ -727,7 +727,7 @@ function DateTimePickerField({
             textAlign: "left",
           }}
         >
-          <CalendarIcon />
+          {/* <CalendarIcon /> */}
           <div
             style={{
               flex: 1,
