@@ -1655,13 +1655,45 @@ function TimeWheel({
   const minutes = ["00", "15", "30", "45"]
   const periods: Array<"AM" | "PM"> = ["AM", "PM"]
 
+  const VISIBLE_ROW_HEIGHT = 34
+  const VISIBLE_ROWS = 3
+  const SIDE_PADDING = VISIBLE_ROW_HEIGHT
+
   const columnStyle: CSSProperties = {
     flex: 1,
-    maxHeight: 190,
+    minWidth: 0,
+    height: VISIBLE_ROW_HEIGHT * VISIBLE_ROWS,
+    borderRadius: 0,
+    background: "rgba(255,255,255,0.04)",
+    border: "none",
+    paddingTop: SIDE_PADDING,
+    paddingBottom: SIDE_PADDING,
+    paddingLeft: 4,
+    paddingRight: 4,
+    display: "grid",
+    gap: 4,
     overflowY: "auto",
     scrollSnapType: "y mandatory",
-    padding: "54px 0",
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
   }
+
+  const buttonStyle = (active: boolean): CSSProperties => ({
+    height: VISIBLE_ROW_HEIGHT,
+    minHeight: VISIBLE_ROW_HEIGHT,
+    borderRadius: 10,
+    border: "none",
+    background: active ? "#1D9BF0" : "transparent",
+    color: active ? "#FFFFFF" : "rgba(255,255,255,0.86)",
+    fontSize: 14,
+    fontWeight: active ? 800 : 600,
+    cursor: "pointer",
+    scrollSnapAlign: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+  })
 
   const itemBaseStyle: CSSProperties = {
     height: 44,
@@ -1683,7 +1715,7 @@ function TimeWheel({
       style={{
         position: "relative",
         marginTop: 14,
-        borderRadius: 30,
+        borderRadius: 15,
         border: "1px solid rgba(255,255,255,0.12)",
         background: "rgba(255,255,255,0.06)",
         overflow: "hidden",
@@ -1693,12 +1725,12 @@ function TimeWheel({
         aria-hidden="true"
         style={{
           position: "absolute",
-          left: 16,
-          right: 16,
+          left: 0,
+          right: 0,
           top: "50%",
           transform: "translateY(-50%)",
-          height: 44,
-          borderRadius: 18,
+          height: VISIBLE_ROW_HEIGHT,
+          //borderRadius: 18,
           background: "rgba(255,255,255,0.12)",
           border: "1px solid rgba(255,255,255,0.06)",
           pointerEvents: "none",
