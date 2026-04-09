@@ -1,8 +1,9 @@
 // app/admin/signup/event/create/[draftId]/details/page.tsx
 "use client"
 
+import { createPortal } from "react-dom"
 import Link from "next/link"
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, useRef, type CSSProperties, type RefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 type EventMode = "tickets" | "locations" | "both"
@@ -433,6 +434,681 @@ function buildTimeOptions() {
   return options
 }
 
+function ChevronLeftIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect x="3" y="4" width="18" height="18" rx="3" />
+      <path d="M3 10h18" />
+    </svg>
+  )
+}
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  )
+}
+
+function parseDateParts(value: string) {
+  if (!value) return null
+  const [yearStr, monthStr, dayStr] = value.split("-")
+  const year = Number(yearStr)
+  const month = Number(monthStr)
+  const day = Number(dayStr)
+  if ([year, month, day].some(Number.isNaN)) return null
+  return { year, month, day }
+}
+
+function getDateFromYMD(value: string) {
+  const parts = parseDateParts(value)
+  if (!parts) return null
+  return new Date(parts.year, parts.month - 1, parts.day, 12, 0, 0, 0)
+}
+
+function toYMD(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function formatDateLabel(value: string) {
+  if (!value) return ""
+  const date = new Date(`${value}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function formatTimeLabel(value: string) {
+  if (!value) return ""
+  const [hourStr, minuteStr] = value.split(":")
+  const hour = Number(hourStr)
+  const minute = Number(minuteStr)
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return ""
+
+  const period = hour < 12 ? "AM" : "PM"
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`
+}
+
+function formatDateTimeLabel(dateValue: string, timeValue: string, fallback: string) {
+  if (!dateValue && !timeValue) return fallback
+  if (dateValue && timeValue) return `${formatDateLabel(dateValue)} · ${formatTimeLabel(timeValue)}`
+  if (dateValue) return formatDateLabel(dateValue)
+  return formatTimeLabel(timeValue)
+}
+
+function parseTimeToParts(
+  value: string
+): { hour: number; minute: string; period: "AM" | "PM" } {
+  if (!value) {
+    return { hour: 8, minute: "00", period: "PM" }
+  }
+
+  const [hourStr, minuteStr] = value.split(":")
+  const rawHour = Number(hourStr)
+  const safeMinute = minuteStr === "30" ? "30" : "00"
+
+  if (Number.isNaN(rawHour)) {
+    return { hour: 8, minute: safeMinute, period: "PM" }
+  }
+
+  const period: "AM" | "PM" = rawHour >= 12 ? "PM" : "AM"
+  const normalizedHour = rawHour % 12 === 0 ? 12 : rawHour % 12
+
+  return {
+    hour: normalizedHour,
+    minute: safeMinute,
+    period,
+  }
+}
+
+function buildTimeFromParts(hour: number, minute: string, period: "AM" | "PM") {
+  let nextHour = hour % 12
+  if (period === "PM") nextHour += 12
+  return `${String(nextHour).padStart(2, "0")}:${minute}`
+}
+
+function useLockBodyScroll(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return
+
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [locked])
+}
+
+function TimeWheel({
+  hour,
+  minute,
+  period,
+  onHourChange,
+  onMinuteChange,
+  onPeriodChange,
+}: {
+  hour: number
+  minute: string
+  period: "AM" | "PM"
+  onHourChange: (value: number) => void
+  onMinuteChange: (value: string) => void
+  onPeriodChange: (value: "AM" | "PM") => void
+}) {
+  const hours = Array.from({ length: 12 }, (_, index) => index + 1)
+  const minutes = ["00", "30"]
+  const periods: Array<"AM" | "PM"> = ["AM", "PM"]
+
+  const columnStyle: CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    padding: 6,
+    display: "grid",
+    gap: 6,
+    maxHeight: 188,
+    overflowY: "auto",
+  }
+
+  const buttonStyle = (active: boolean): CSSProperties => ({
+    height: 36,
+    borderRadius: 12,
+    border: "none",
+    background: active ? "#1D9BF0" : "transparent",
+    color: active ? "#FFFFFF" : "rgba(255,255,255,0.86)",
+    fontSize: 14,
+    fontWeight: active ? 800 : 600,
+    cursor: "pointer",
+  })
+
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <div style={columnStyle}>
+        {hours.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onHourChange(value)}
+            style={buttonStyle(hour === value)}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+
+      <div style={columnStyle}>
+        {minutes.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onMinuteChange(value)}
+            style={buttonStyle(minute === value)}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+
+      <div style={columnStyle}>
+        {periods.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onPeriodChange(value)}
+            style={buttonStyle(period === value)}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DateTimePickerField({
+  label,
+  dateValue,
+  timeValue,
+  onDateChange,
+  onTimeChange,
+  placeholder,
+  isMobile,
+}: {
+  label: string
+  dateValue: string
+  timeValue: string
+  onDateChange: (value: string) => void
+  onTimeChange: (value: string) => void
+  placeholder: string
+  isMobile: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [showTimeWheel, setShowTimeWheel] = useState(false)
+
+  const initialDate = getDateFromYMD(dateValue) ?? new Date()
+  const initialTime = parseTimeToParts(timeValue)
+
+  const [draftDate, setDraftDate] = useState(dateValue || toYMD(initialDate))
+  const [draftHour, setDraftHour] = useState(initialTime.hour)
+  const [draftMinute, setDraftMinute] = useState(initialTime.minute)
+  const [draftPeriod, setDraftPeriod] = useState<"AM" | "PM">(initialTime.period)
+  const [viewDate, setViewDate] = useState(
+    new Date(initialDate.getFullYear(), initialDate.getMonth(), 1)
+  )
+
+  useLockBodyScroll(open)
+
+  useEffect(() => {
+    if (!open) return
+
+    const nextDate = getDateFromYMD(dateValue) ?? new Date()
+    const nextTime = parseTimeToParts(timeValue)
+
+    setDraftDate(dateValue || toYMD(nextDate))
+    setDraftHour(nextTime.hour)
+    setDraftMinute(nextTime.minute)
+    setDraftPeriod(nextTime.period)
+    setViewDate(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1))
+    setShowTimeWheel(false)
+  }, [open, dateValue, timeValue])
+
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+  const leadingDays = firstDay.getDay()
+  const daysInMonth = lastDay.getDate()
+  const selectedDate = getDateFromYMD(draftDate)
+
+  const cells: Array<{ date: Date | null; key: string }> = []
+
+  for (let i = 0; i < leadingDays; i += 1) {
+    cells.push({ date: null, key: `empty-start-${i}` })
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push({
+      date: new Date(year, month, day, 12, 0, 0, 0),
+      key: `day-${day}`,
+    })
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ date: null, key: `empty-end-${cells.length}` })
+  }
+
+  const draftTimeValue = buildTimeFromParts(draftHour, draftMinute, draftPeriod)
+  const draftTimeLabel = formatTimeLabel(draftTimeValue)
+
+  return (
+    <>
+      <div style={{ position: "relative", minWidth: 0 }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "1.2px",
+            textTransform: "uppercase",
+            color: "#64748B",
+          }}
+        >
+          {label}
+        </label>
+
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          style={{
+            minHeight: 48,
+            width: "100%",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.22)",
+            background: "rgba(255,255,255,0.14)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.55), 0 8px 18px rgba(15,23,42,0.05)",
+            padding: "0 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            boxSizing: "border-box",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <CalendarIcon />
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 13,
+              fontWeight: 700,
+              color: dateValue || timeValue ? "#0F172A" : "#64748B",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {formatDateTimeLabel(dateValue, timeValue, placeholder)}
+          </div>
+
+          <div style={{ color: "#64748B", flexShrink: 0 }}>
+            <ChevronDownIcon />
+          </div>
+        </button>
+      </div>
+
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                background: "rgba(0,0,0,0.58)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 12,
+              }}
+              onClick={() => setOpen(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: isMobile ? "min(88vw, 340px)" : "min(360px, 92vw)",
+                  maxHeight: isMobile ? "calc(100vh - 24px)" : "calc(100vh - 48px)",
+                  borderRadius: 22,
+                  background: "#0A0A0A",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 24px 70px rgba(0,0,0,0.42)",
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                }}
+              >
+                <div style={{ padding: "12px 12px 8px" }}>
+                  <div
+                    style={{
+                      width: 42,
+                      height: 4,
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.22)",
+                      margin: "0 auto 10px",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "rgba(255,255,255,0.46)",
+                      marginBottom: 12,
+                    }}
+                  >
+                    Select date and time
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: "#FFFFFF",
+                      }}
+                    >
+                      {viewDate.toLocaleDateString("en-US", {
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <button
+                        type="button"
+                        onClick={() => setViewDate(new Date(year, month - 1, 1))}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 999,
+                          border: "none",
+                          background: "transparent",
+                          color: "rgba(255,255,255,0.52)",
+                          display: "grid",
+                          placeItems: "center",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <ChevronLeftIcon />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setViewDate(new Date(year, month + 1, 1))}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 999,
+                          border: "none",
+                          background: "transparent",
+                          color: "#1D9BF0",
+                          display: "grid",
+                          placeItems: "center",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <ChevronRightIcon />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      gap: 4,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
+                      <div
+                        key={day}
+                        style={{
+                          textAlign: "center",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "rgba(255,255,255,0.48)",
+                          paddingBottom: 2,
+                        }}
+                      >
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      gap: 4,
+                    }}
+                  >
+                    {cells.map((cell) => {
+                      if (!cell.date) return <div key={cell.key} style={{ height: 36 }} />
+
+                      const selected = selectedDate ? isSameDay(cell.date, selectedDate) : false
+
+                      return (
+                        <button
+                          key={cell.key}
+                          type="button"
+                          onClick={() => setDraftDate(toYMD(cell.date!))}
+                          style={{
+                            height: 36,
+                            borderRadius: 999,
+                            border: "none",
+                            background: selected ? "#1D9BF0" : "transparent",
+                            color: selected ? "#FFFFFF" : "rgba(255,255,255,0.92)",
+                            fontSize: 14,
+                            fontWeight: selected ? 800 : 500,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {cell.date.getDate()}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      paddingTop: 10,
+                      borderTop: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "#FFFFFF",
+                        }}
+                      >
+                        Time
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowTimeWheel((prev) => !prev)}
+                        style={{
+                          minWidth: 92,
+                          height: 36,
+                          padding: "0 14px",
+                          borderRadius: 999,
+                          border: "none",
+                          background: "rgba(255,255,255,0.12)",
+                          color: "#FFFFFF",
+                          fontSize: 15,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {draftTimeLabel}
+                      </button>
+                    </div>
+
+                    {showTimeWheel ? (
+                      <div style={{ marginTop: 10 }}>
+                        <TimeWheel
+                          hour={draftHour}
+                          minute={draftMinute}
+                          period={draftPeriod}
+                          onHourChange={setDraftHour}
+                          onMinuteChange={setDraftMinute}
+                          onPeriodChange={setDraftPeriod}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDateChange(draftDate)
+                      onTimeChange(draftTimeValue)
+                      setOpen(false)
+                    }}
+                    style={{
+                      height: 54,
+                      border: "none",
+                      background: "transparent",
+                      color: "#1D9BF0",
+                      fontSize: 16,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Confirm
+                  </button>
+
+                  <div
+                    style={{
+                      height: 1,
+                      background: "rgba(255,255,255,0.08)",
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    style={{
+                      height: 54,
+                      border: "none",
+                      background: "transparent",
+                      color: "#1D9BF0",
+                      fontSize: 16,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  )
+}
+
 function WindowFields({
   label,
   valueStart,
@@ -440,6 +1116,7 @@ function WindowFields({
   onChangeStart,
   onChangeEnd,
   styles,
+  isMobile,
 }: {
   label: string
   valueStart: string
@@ -447,89 +1124,33 @@ function WindowFields({
   onChangeStart: (next: string) => void
   onChangeEnd: (next: string) => void
   styles: Record<string, CSSProperties>
+  isMobile: boolean
 }) {
   const start = splitDateTime(valueStart)
   const end = splitDateTime(valueEnd)
-  const timeOptions = buildTimeOptions()
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div style={styles.windowCard}>
-        <div style={styles.windowTitle}>{label}</div>
+      <div style={styles.windowGrid}>
+        <DateTimePickerField
+          label={`${label} Start`}
+          dateValue={start.date}
+          timeValue={start.time}
+          onDateChange={(nextDate) => onChangeStart(setDatePart(valueStart, nextDate))}
+          onTimeChange={(nextTime) => onChangeStart(setTimePart(valueStart, nextTime))}
+          placeholder="Select start"
+          isMobile={isMobile}
+        />
 
-        <div style={styles.windowGrid}>
-          <div>
-            <label style={styles.fieldLabel}>Start Date</label>
-            <div style={styles.fieldShell}>
-              <input
-                style={styles.fieldInput}
-                type="date"
-                value={start.date}
-                onChange={(e) => onChangeStart(setDatePart(valueStart, e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label style={styles.fieldLabel}>Start Time</label>
-            <div style={styles.selectShell}>
-              <select
-                style={styles.select}
-                value={start.time}
-                onChange={(e) => onChangeStart(setTimePart(valueStart, e.target.value))}
-              >
-                <option value="">Select start time</option>
-                {timeOptions.map((entry) => {
-                  const [value, optionLabel] = entry.split("|")
-                  return (
-                    <option key={value} value={value}>
-                      {optionLabel}
-                    </option>
-                  )
-                })}
-              </select>
-              <div style={styles.selectIcon}>
-                <ChevronDownIcon />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label style={styles.fieldLabel}>End Date</label>
-            <div style={styles.fieldShell}>
-              <input
-                style={styles.fieldInput}
-                type="date"
-                value={end.date}
-                onChange={(e) => onChangeEnd(setDatePart(valueEnd, e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label style={styles.fieldLabel}>End Time</label>
-            <div style={styles.selectShell}>
-              <select
-                style={styles.select}
-                value={end.time}
-                onChange={(e) => onChangeEnd(setTimePart(valueEnd, e.target.value))}
-              >
-                <option value="">Select end time</option>
-                {timeOptions.map((entry) => {
-                  const [value, optionLabel] = entry.split("|")
-                  return (
-                    <option key={value} value={value}>
-                      {optionLabel}
-                    </option>
-                  )
-                })}
-              </select>
-              <div style={styles.selectIcon}>
-                <ChevronDownIcon />
-              </div>
-            </div>
-          </div>
-        </div>
+        <DateTimePickerField
+          label={`${label} End`}
+          dateValue={end.date}
+          timeValue={end.time}
+          onDateChange={(nextDate) => onChangeEnd(setDatePart(valueEnd, nextDate))}
+          onTimeChange={(nextTime) => onChangeEnd(setTimePart(valueEnd, nextTime))}
+          placeholder="Select end"
+          isMobile={isMobile}
+        />
       </div>
     </div>
   )
@@ -757,8 +1378,9 @@ export default function AdminSignupEventDetailsPage() {
 
   const grid3 = {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: 14,
+    gridTemplateColumns: isCompact ? "1fr 1fr 1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+    alignItems: "end",
   } satisfies CSSProperties
 
   const styles: Record<string, CSSProperties> = {
@@ -781,14 +1403,14 @@ export default function AdminSignupEventDetailsPage() {
       marginBottom: 18,
     },
     gfMark: {
-      width: 58,
-      height: 58,
+      width: 54,
+      height: 54,
       borderRadius: 18,
       display: "grid",
       placeItems: "center",
-      background: "#0f172a",
-      color: "#ffffff",
-      fontSize: 20,
+      background: "rgba(255,255,255,0.22)",
+      color: "#0F172A",
+      fontSize: 19,
       fontWeight: 900,
       letterSpacing: "-0.5px",
       boxShadow: "0 14px 32px rgba(15, 23, 42, 0.18)",
@@ -799,16 +1421,20 @@ export default function AdminSignupEventDetailsPage() {
       color: "#0f766e",
       textDecoration: "none",
     },
-    card: {
-      borderRadius: isCompact ? 28 : 34,
-      border: "1px solid rgba(148, 163, 184, 0.16)",
-      background: "rgba(255, 255, 255, 0.82)",
-      backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
-      boxShadow: "0 12px 28px rgba(15, 23, 42, 0.10)",
-      padding: isCompact ? 20 : 34,
-      overflow: "hidden",
-      isolation: "isolate",
+    // card: {
+    //   borderRadius: isCompact ? 28 : 34,
+    //   border: "1px solid rgba(148, 163, 184, 0.16)",
+    //   background: "rgba(255, 255, 255, 0.82)",
+    //   backdropFilter: "blur(20px)",
+    //   WebkitBackdropFilter: "blur(20px)",
+    //   boxShadow: "0 12px 28px rgba(15, 23, 42, 0.10)",
+    //   padding: isCompact ? 20 : 34,
+    //   overflow: "hidden",
+    //   isolation: "isolate",
+    // },
+    contentWrap: {
+    display: "grid",
+    gap: 20,
     },
     intentBadge: {
       display: "inline-flex",
@@ -816,8 +1442,8 @@ export default function AdminSignupEventDetailsPage() {
       gap: 10,
       borderRadius: 999,
       padding: "10px 16px",
-      background: "rgba(15, 118, 110, 0.08)",
-      border: "1px solid rgba(15, 118, 110, 0.12)",
+      //background: "rgba(15, 118, 110, 0.08)",
+      //border: "1px solid rgba(15, 118, 110, 0.12)",
       fontSize: 11,
       fontWeight: 800,
       letterSpacing: "1.6px",
@@ -872,15 +1498,15 @@ export default function AdminSignupEventDetailsPage() {
       WebkitBackdropFilter: "blur(16px)",
     },
     itemCard: {
-      borderRadius: 26,
-      border: "1px solid rgba(148,163,184,0.16)",
-      background: "rgba(255,255,255,0.62)",
-      backdropFilter: "blur(18px)",
-      WebkitBackdropFilter: "blur(18px)",
-      boxShadow: "0 10px 24px rgba(15,23,42,0.08)",
-      padding: 18,
-      marginTop: 14,
-    },
+  borderRadius: isCompact ? 24 : 30,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.10)",
+  backdropFilter: "blur(22px)",
+  WebkitBackdropFilter: "blur(22px)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
+  padding: isCompact ? 16 : 22,
+  marginTop: 14,
+},
     itemHeader: {
       display: "flex",
       alignItems: "center",
@@ -908,35 +1534,76 @@ export default function AdminSignupEventDetailsPage() {
     },
     fieldLabel: {
       display: "block",
-      marginBottom: 8,
-      fontSize: 11,
+      marginBottom: 6,
+      fontSize: 10,
       fontWeight: 800,
-      letterSpacing: "1.5px",
+      letterSpacing: "1.2px",
       textTransform: "uppercase",
       color: "#64748b",
     },
-    fieldShell: {
-      minHeight: 58,
+    fieldSelectShell: {
+      minHeight: 56,
       width: "100%",
       borderRadius: 18,
-      border: "1px solid rgba(148,163,184,0.14)",
-      background: "rgba(255,255,255,0.74)",
+      border: "1px solid rgba(255,255,255,0.22)",
+      background: "rgba(255,255,255,0.14)",
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
-      boxShadow:
-        "inset 0 1px 0 rgba(255,255,255,0.68), 0 10px 22px rgba(15,23,42,0.05)",
-      padding: "0 16px",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 22px rgba(15,23,42,0.05)",
+      padding: "0 14px",
       display: "flex",
       alignItems: "center",
-      gap: 10,
+      gap: 9,
+      position: "relative",
       boxSizing: "border-box",
+      minWidth: 0,
     },
-    fieldInput: {
+    fieldSelect: {
       width: "100%",
+      height: 50,
+      minWidth: 0,
       border: "none",
       outline: "none",
       background: "transparent",
-      fontSize: 15,
+      fontSize: isCompact ? 13 : 14,
+      fontWeight: 700,
+      color: "#0F172A",
+      appearance: "none",
+      WebkitAppearance: "none",
+      MozAppearance: "none",
+      cursor: "pointer",
+      paddingRight: 24,
+      fontFamily: "inherit",
+    },
+    fieldSelectIcon: {
+      position: "absolute",
+      right: 14,
+      color: "#64748B",
+      pointerEvents: "none",
+    },
+    fieldShell: {
+      minHeight: 56,
+      width: "100%",
+      borderRadius: 18,
+      border: "1px solid rgba(255,255,255,0.22)",
+      background: "rgba(255,255,255,0.14)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 22px rgba(15,23,42,0.05)",
+      padding: "0 14px",
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      boxSizing: "border-box",
+      minWidth: 0,
+    },
+    fieldInput: {
+      width: "100%",
+      minWidth: 0,
+      border: "none",
+      outline: "none",
+      background: "transparent",
+      fontSize: isCompact ? 13 : 15,
       fontWeight: 700,
       color: "#0f172a",
       boxSizing: "border-box",
@@ -945,12 +1612,11 @@ export default function AdminSignupEventDetailsPage() {
     textareaShell: {
       width: "100%",
       borderRadius: 22,
-      border: "1px solid rgba(148,163,184,0.14)",
-      background: "rgba(255,255,255,0.72)",
+      border: "1px solid rgba(255,255,255,0.22)",
+      background: "rgba(255,255,255,0.14)",
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
-      boxShadow:
-        "inset 0 1px 0 rgba(255,255,255,0.68), 0 10px 22px rgba(15,23,42,0.05)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 22px rgba(15,23,42,0.05)",
       padding: 16,
       boxSizing: "border-box",
     },
@@ -1086,6 +1752,15 @@ export default function AdminSignupEventDetailsPage() {
       fontWeight: 700,
       padding: "40px 0",
     },
+    loaderWrap: {
+    borderRadius: isCompact ? 24 : 30,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.10)",
+    backdropFilter: "blur(22px)",
+    WebkitBackdropFilter: "blur(22px)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
+    padding: isCompact ? 16 : 22,
+    },
     selectShell: {
     minHeight: 52,
     width: "100%",
@@ -1132,7 +1807,7 @@ export default function AdminSignupEventDetailsPage() {
     return (
       <div style={styles.page}>
         <div style={styles.shell}>
-          <div style={styles.card}>
+          <div style={styles.loaderWrap}>
             <div style={styles.loader}>Loading booking details…</div>
           </div>
         </div>
@@ -1160,8 +1835,8 @@ export default function AdminSignupEventDetailsPage() {
           </Link>
         </div>
 
-        <section style={styles.card}>
-          <div style={styles.intentBadge}>Booking Details</div>
+        <section style={styles.contentWrap}>
+          {/* <div style={styles.intentBadge}>Booking Details</div> */}
 
           <div style={styles.title}>Set up your tickets, locations, and promo codes</div>
 
@@ -1274,12 +1949,13 @@ export default function AdminSignupEventDetailsPage() {
                     </div>
 
                     <WindowFields
-                      label="Sales Window"
-                      valueStart={ticket.salesStart}
-                      valueEnd={ticket.salesEnd}
-                      onChangeStart={(next) => updateTicket(ticket.id, { salesStart: next })}
-                      onChangeEnd={(next) => updateTicket(ticket.id, { salesEnd: next })}
-                      styles={styles}
+                        label="Sales Window"
+                        valueStart={ticket.salesStart}
+                        valueEnd={ticket.salesEnd}
+                        onChangeStart={(next) => updateTicket(ticket.id, { salesStart: next })}
+                        onChangeEnd={(next) => updateTicket(ticket.id, { salesEnd: next })}
+                        styles={styles}
+                        isMobile={isCompact}
                     />
 
                     <div style={styles.toggleRow}>
@@ -1414,13 +2090,14 @@ export default function AdminSignupEventDetailsPage() {
                     </div>
 
                     <WindowFields
-                      label="Booking Window"
-                      valueStart={item.bookingStart}
-                      valueEnd={item.bookingEnd}
-                      onChangeStart={(next) => updateLocation(item.id, { bookingStart: next })}
-                      onChangeEnd={(next) => updateLocation(item.id, { bookingEnd: next })}
-                      styles={styles}
-                    />
+  label="Booking Window"
+  valueStart={item.bookingStart}
+  valueEnd={item.bookingEnd}
+  onChangeStart={(next) => updateLocation(item.id, { bookingStart: next })}
+  onChangeEnd={(next) => updateLocation(item.id, { bookingEnd: next })}
+  styles={styles}
+  isMobile={isCompact}
+/>
 
                     <div style={styles.toggleRow}>
                       <div>
@@ -1647,13 +2324,14 @@ export default function AdminSignupEventDetailsPage() {
                   ) : null}
 
                   <WindowFields
-                    label="Promo Active Window"
-                    valueStart={promo.activeStart}
-                    valueEnd={promo.activeEnd}
-                    onChangeStart={(next) => updatePromoCode(promo.id, { activeStart: next })}
-                    onChangeEnd={(next) => updatePromoCode(promo.id, { activeEnd: next })}
-                    styles={styles}
-                  />
+  label="Promo Active Window"
+  valueStart={promo.activeStart}
+  valueEnd={promo.activeEnd}
+  onChangeStart={(next) => updatePromoCode(promo.id, { activeStart: next })}
+  onChangeEnd={(next) => updatePromoCode(promo.id, { activeEnd: next })}
+  styles={styles}
+  isMobile={isCompact}
+/>
                 </div>
               </div>
             ))}
