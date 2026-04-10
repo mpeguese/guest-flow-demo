@@ -303,23 +303,25 @@ function normalizeDraft(stored: any): EventDraftRecord {
   const mode: EventMode = stored?.basics?.eventMode ?? "both"
   const rawBooking = stored?.booking ?? {}
 
-  const tickets =
-    Array.isArray(rawBooking.tickets) && rawBooking.tickets.length > 0
-      ? rawBooking.tickets.map((item: Partial<TicketItem>) => normalizeTicket(item))
-      : mode === "tickets" || mode === "both"
-        ? [emptyTicket()]
-        : []
+  const basics = stored?.basics
 
-  const locations =
-    Array.isArray(rawBooking.locations) && rawBooking.locations.length > 0
-      ? rawBooking.locations.map((item: Partial<LocationItem>) => normalizeLocation(item))
-      : mode === "locations" || mode === "both"
-        ? [emptyLocation()]
-        : []
+const tickets =
+  Array.isArray(rawBooking.tickets) && rawBooking.tickets.length > 0
+    ? rawBooking.tickets.map((item: Partial<TicketItem>) => normalizeTicket(item))
+    : mode === "tickets" || mode === "both"
+      ? [emptyTicket()]
+      : []
 
-  const promoCodes = Array.isArray(rawBooking.promoCodes)
-    ? rawBooking.promoCodes.map((item: Partial<PromoCodeItem>) => normalizePromoCode(item))
-    : []
+const locations =
+  Array.isArray(rawBooking.locations) && rawBooking.locations.length > 0
+    ? rawBooking.locations.map((item: Partial<LocationItem>) => normalizeLocation(item))
+    : mode === "locations" || mode === "both"
+      ? [emptyLocation()]
+      : []
+
+const promoCodes = Array.isArray(rawBooking.promoCodes)
+  ? rawBooking.promoCodes.map((item: Partial<PromoCodeItem>) => normalizePromoCode(item))
+  : []
 
   return {
     ...stored,
@@ -557,32 +559,37 @@ function formatDateTimeLabel(dateValue: string, timeValue: string, fallback: str
 
 function parseTimeToParts(
   value: string
-): { hour: number; minute: string; period: "AM" | "PM" } {
+): { hour: string; minute: string; period: "AM" | "PM" } {
   if (!value) {
-    return { hour: 8, minute: "00", period: "PM" }
+    return { hour: "8", minute: "00", period: "PM" }
   }
 
-  const [hourStr, minuteStr] = value.split(":")
+  const [hourStr, minuteStrRaw] = value.split(":")
   const rawHour = Number(hourStr)
-  const safeMinute = minuteStr === "30" ? "30" : "00"
 
   if (Number.isNaN(rawHour)) {
-    return { hour: 8, minute: safeMinute, period: "PM" }
+    return { hour: "8", minute: "00", period: "PM" }
   }
 
+  const allowedMinutes = ["00", "15", "30", "45"]
+  const minute = allowedMinutes.includes(minuteStrRaw) ? minuteStrRaw : "00"
   const period: "AM" | "PM" = rawHour >= 12 ? "PM" : "AM"
-  const normalizedHour = rawHour % 12 === 0 ? 12 : rawHour % 12
+  const hour12 = rawHour % 12 === 0 ? 12 : rawHour % 12
 
   return {
-    hour: normalizedHour,
-    minute: safeMinute,
+    hour: String(hour12),
+    minute,
     period,
   }
 }
 
-function buildTimeFromParts(hour: number, minute: string, period: "AM" | "PM") {
-  let nextHour = hour % 12
+function buildTimeFromParts(hour: string, minute: string, period: "AM" | "PM") {
+  const parsedHour = Number(hour)
+  const safeHour = Number.isNaN(parsedHour) ? 12 : parsedHour
+
+  let nextHour = safeHour % 12
   if (period === "PM") nextHour += 12
+
   return `${String(nextHour).padStart(2, "0")}:${minute}`
 }
 
@@ -607,80 +614,146 @@ function TimeWheel({
   onMinuteChange,
   onPeriodChange,
 }: {
-  hour: number
+  hour: string
   minute: string
   period: "AM" | "PM"
-  onHourChange: (value: number) => void
+  onHourChange: (value: string) => void
   onMinuteChange: (value: string) => void
   onPeriodChange: (value: "AM" | "PM") => void
 }) {
-  const hours = Array.from({ length: 12 }, (_, index) => index + 1)
-  const minutes = ["00", "30"]
+  const hours = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+  const minutes = ["00", "15", "30", "45"]
   const periods: Array<"AM" | "PM"> = ["AM", "PM"]
+
+  const VISIBLE_ROW_HEIGHT = 34
+  const VISIBLE_ROWS = 3
+  const SIDE_PADDING = VISIBLE_ROW_HEIGHT
 
   const columnStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    padding: 6,
+    height: VISIBLE_ROW_HEIGHT * VISIBLE_ROWS,
+    borderRadius: 0,
+    background: "rgba(255,255,255,0.04)",
+    border: "none",
+    paddingTop: SIDE_PADDING,
+    paddingBottom: SIDE_PADDING,
+    paddingLeft: 4,
+    paddingRight: 4,
     display: "grid",
-    gap: 6,
-    maxHeight: 188,
+    gap: 4,
     overflowY: "auto",
+    scrollSnapType: "y mandatory",
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
   }
 
-  const buttonStyle = (active: boolean): CSSProperties => ({
-    height: 36,
-    borderRadius: 12,
+  const itemBaseStyle: CSSProperties = {
+    height: 44,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+    fontWeight: 500,
+    color: "rgba(255,255,255,0.28)",
+    scrollSnapAlign: "center",
     border: "none",
-    background: active ? "#1D9BF0" : "transparent",
-    color: active ? "#FFFFFF" : "rgba(255,255,255,0.86)",
-    fontSize: 14,
-    fontWeight: active ? 800 : 600,
+    background: "transparent",
+    width: "100%",
     cursor: "pointer",
-  })
+  }
 
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <div style={columnStyle}>
-        {hours.map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onHourChange(value)}
-            style={buttonStyle(hour === value)}
-          >
-            {value}
-          </button>
-        ))}
-      </div>
+    <div
+      style={{
+        position: "relative",
+        marginTop: 14,
+        borderRadius: 15,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(255,255,255,0.06)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: "50%",
+          transform: "translateY(-50%)",
+          height: VISIBLE_ROW_HEIGHT,
+          background: "rgba(255,255,255,0.12)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          pointerEvents: "none",
+        }}
+      />
 
-      <div style={columnStyle}>
-        {minutes.map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onMinuteChange(value)}
-            style={buttonStyle(minute === value)}
-          >
-            {value}
-          </button>
-        ))}
-      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 0,
+        }}
+      >
+        <div style={columnStyle}>
+          {hours.map((item) => {
+            const active = item === hour
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onHourChange(item)}
+                style={{
+                  ...itemBaseStyle,
+                  color: active ? "#FFFFFF" : "rgba(255,255,255,0.28)",
+                  fontWeight: active ? 700 : 500,
+                }}
+              >
+                {item}
+              </button>
+            )
+          })}
+        </div>
 
-      <div style={columnStyle}>
-        {periods.map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onPeriodChange(value)}
-            style={buttonStyle(period === value)}
-          >
-            {value}
-          </button>
-        ))}
+        <div style={columnStyle}>
+          {minutes.map((item) => {
+            const active = item === minute
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onMinuteChange(item)}
+                style={{
+                  ...itemBaseStyle,
+                  color: active ? "#FFFFFF" : "rgba(255,255,255,0.28)",
+                  fontWeight: active ? 700 : 500,
+                }}
+              >
+                {item}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={columnStyle}>
+          {periods.map((item) => {
+            const active = item === period
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onPeriodChange(item)}
+                style={{
+                  ...itemBaseStyle,
+                  color: active ? "#FFFFFF" : "rgba(255,255,255,0.28)",
+                  fontWeight: active ? 700 : 500,
+                }}
+              >
+                {item}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -690,16 +763,14 @@ function DateTimePickerField({
   label,
   dateValue,
   timeValue,
-  onDateChange,
-  onTimeChange,
+  onChange,
   placeholder,
   isMobile,
 }: {
   label: string
   dateValue: string
   timeValue: string
-  onDateChange: (value: string) => void
-  onTimeChange: (value: string) => void
+  onChange: (value: string) => void
   placeholder: string
   isMobile: boolean
 }) {
@@ -1060,9 +1131,8 @@ function DateTimePickerField({
                   <button
                     type="button"
                     onClick={() => {
-                      onDateChange(draftDate)
-                      onTimeChange(draftTimeValue)
-                      setOpen(false)
+                        onChange(mergeDateTime(draftDate, draftTimeValue))
+                        setOpen(false)
                     }}
                     style={{
                       height: 54,
@@ -1136,8 +1206,7 @@ function WindowFields({
           label={`${label} Start`}
           dateValue={start.date}
           timeValue={start.time}
-          onDateChange={(nextDate) => onChangeStart(setDatePart(valueStart, nextDate))}
-          onTimeChange={(nextTime) => onChangeStart(setTimePart(valueStart, nextTime))}
+          onChange={onChangeStart}
           placeholder="Select start"
           isMobile={isMobile}
         />
@@ -1146,8 +1215,7 @@ function WindowFields({
           label={`${label} End`}
           dateValue={end.date}
           timeValue={end.time}
-          onDateChange={(nextDate) => onChangeEnd(setDatePart(valueEnd, nextDate))}
-          onTimeChange={(nextTime) => onChangeEnd(setTimePart(valueEnd, nextTime))}
+          onChange={onChangeEnd}
           placeholder="Select end"
           isMobile={isMobile}
         />
@@ -1299,40 +1367,91 @@ export default function AdminSignupEventDetailsPage() {
   }
 
   const addTicket = () => {
-    if (!draft) return
+  if (!draft) return
 
-    saveAndSetDraft({
-      ...draft,
-      booking: {
-        ...draft.booking,
-        tickets: [...draft.booking.tickets, emptyTicket()],
-      },
-    })
-  }
+  const defaultStart =
+    draft.basics.eventDate && draft.basics.startTime
+      ? `${draft.basics.eventDate}T${draft.basics.startTime}`
+      : ""
+
+  const defaultEnd =
+    draft.basics.eventDate && draft.basics.endTime
+      ? `${draft.basics.eventDate}T${draft.basics.endTime}`
+      : ""
+
+  saveAndSetDraft({
+    ...draft,
+    booking: {
+      ...draft.booking,
+      tickets: [
+        ...draft.booking.tickets,
+        {
+          ...emptyTicket(),
+          salesStart: defaultStart,
+          salesEnd: defaultEnd,
+        },
+      ],
+    },
+  })
+}
 
   const addLocation = () => {
-    if (!draft) return
+  if (!draft) return
 
-    saveAndSetDraft({
-      ...draft,
-      booking: {
-        ...draft.booking,
-        locations: [...draft.booking.locations, emptyLocation()],
-      },
-    })
-  }
+  const defaultStart =
+    draft.basics.eventDate && draft.basics.startTime
+      ? `${draft.basics.eventDate}T${draft.basics.startTime}`
+      : ""
+
+  const defaultEnd =
+    draft.basics.eventDate && draft.basics.endTime
+      ? `${draft.basics.eventDate}T${draft.basics.endTime}`
+      : ""
+
+  saveAndSetDraft({
+    ...draft,
+    booking: {
+      ...draft.booking,
+      locations: [
+        ...draft.booking.locations,
+        {
+          ...emptyLocation(),
+          bookingStart: defaultStart,
+          bookingEnd: defaultEnd,
+        },
+      ],
+    },
+  })
+}
 
   const addPromoCode = () => {
-    if (!draft) return
+  if (!draft) return
 
-    saveAndSetDraft({
-      ...draft,
-      booking: {
-        ...draft.booking,
-        promoCodes: [...draft.booking.promoCodes, emptyPromoCode()],
-      },
-    })
-  }
+  const defaultStart =
+    draft.basics.eventDate && draft.basics.startTime
+      ? `${draft.basics.eventDate}T${draft.basics.startTime}`
+      : ""
+
+  const defaultEnd =
+    draft.basics.eventDate && draft.basics.endTime
+      ? `${draft.basics.eventDate}T${draft.basics.endTime}`
+      : ""
+
+  saveAndSetDraft({
+    ...draft,
+    booking: {
+      ...draft.booking,
+      promoCodes: [
+        ...draft.booking.promoCodes,
+        {
+          ...emptyPromoCode(),
+          activeStart: defaultStart,
+          activeEnd: defaultEnd,
+        },
+      ],
+    },
+  })
+}
 
   const removeTicket = (id: string) => {
     if (!draft) return
@@ -1498,15 +1617,15 @@ export default function AdminSignupEventDetailsPage() {
       WebkitBackdropFilter: "blur(16px)",
     },
     itemCard: {
-  borderRadius: isCompact ? 24 : 30,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.10)",
-  backdropFilter: "blur(22px)",
-  WebkitBackdropFilter: "blur(22px)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
-  padding: isCompact ? 16 : 22,
-  marginTop: 14,
-},
+      borderRadius: isCompact ? 24 : 30,
+      border: "1px solid rgba(255,255,255,0.18)",
+      background: "rgba(255,255,255,0.10)",
+      backdropFilter: "blur(22px)",
+      WebkitBackdropFilter: "blur(22px)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
+      padding: isCompact ? 16 : 22,
+      marginTop: 14,
+    },
     itemHeader: {
       display: "flex",
       alignItems: "center",
@@ -1929,9 +2048,9 @@ export default function AdminSignupEventDetailsPage() {
 
                       <div>
                         <label style={styles.fieldLabel}>Status</label>
-                        <div style={styles.fieldShell}>
+                        <div style={styles.fieldSelectShell}>
                           <select
-                            style={styles.fieldInput}
+                            style={styles.fieldSelect}
                             value={ticket.status}
                             onChange={(e) =>
                               updateTicket(ticket.id, {
@@ -2070,9 +2189,9 @@ export default function AdminSignupEventDetailsPage() {
 
                       <div>
                         <label style={styles.fieldLabel}>Status</label>
-                        <div style={styles.fieldShell}>
+                        <div style={styles.fieldSelectShell}>
                           <select
-                            style={styles.fieldInput}
+                            style={styles.fieldSelect}
                             value={item.status}
                             onChange={(e) =>
                               updateLocation(item.id, {
@@ -2187,24 +2306,27 @@ export default function AdminSignupEventDetailsPage() {
 
                   <div style={grid3}>
                     <div>
-                      <label style={styles.fieldLabel}>Discount Type</label>
-                      <div style={styles.fieldShell}>
-                        <select
-                          style={styles.fieldInput}
-                          value={promo.discountType}
-                          onChange={(e) =>
-                            updatePromoCode(promo.id, {
-                              discountType: e.target.value as DiscountType,
-                              discountValue:
-                                e.target.value === "none" ? "" : promo.discountValue,
-                            })
-                          }
-                        >
-                          <option value="none">None</option>
-                          <option value="fixed">Fixed Amount Off</option>
-                          <option value="percentage">Percentage Off</option>
-                        </select>
-                      </div>
+                    <label style={styles.fieldLabel}>Discount Type</label>
+                        <div style={styles.fieldSelectShell}>
+                            <select
+                            style={styles.fieldSelect}
+                            value={promo.discountType}
+                            onChange={(e) =>
+                                updatePromoCode(promo.id, {
+                                discountType: e.target.value as DiscountType,
+                                discountValue:
+                                    e.target.value === "none" ? "" : promo.discountValue,
+                                })
+                            }
+                            >
+                            <option value="none">None</option>
+                            <option value="fixed">Fixed Amount Off</option>
+                            <option value="percentage">Percentage Off</option>
+                            </select>
+                            <div style={styles.fieldSelectIcon}>
+                            <ChevronDownIcon />
+                            </div>
+                        </div>
                     </div>
 
                     <div>
@@ -2227,23 +2349,26 @@ export default function AdminSignupEventDetailsPage() {
                     </div>
 
                     <div>
-                      <label style={styles.fieldLabel}>Attribution</label>
-                      <div style={styles.fieldShell}>
-                        <select
-                          style={styles.fieldInput}
-                          value={promo.attributionMode}
-                          onChange={(e) =>
-                            updatePromoCode(promo.id, {
-                              attributionMode: e.target.value as AttributionMode,
-                              promoterName:
-                                e.target.value === "none" ? "" : promo.promoterName,
-                            })
-                          }
-                        >
-                          <option value="none">None</option>
-                          <option value="promoter">Promoter Attribution</option>
-                        </select>
-                      </div>
+                    <label style={styles.fieldLabel}>Attribution</label>
+                        <div style={styles.fieldSelectShell}>
+                            <select
+                            style={styles.fieldSelect}
+                            value={promo.attributionMode}
+                            onChange={(e) =>
+                                updatePromoCode(promo.id, {
+                                attributionMode: e.target.value as AttributionMode,
+                                promoterName:
+                                    e.target.value === "none" ? "" : promo.promoterName,
+                                })
+                            }
+                            >
+                            <option value="none">None</option>
+                            <option value="promoter">Promoter Attribution</option>
+                            </select>
+                            <div style={styles.fieldSelectIcon}>
+                            <ChevronDownIcon />
+                            </div>
+                        </div>
                     </div>
                   </div>
 
@@ -2268,30 +2393,33 @@ export default function AdminSignupEventDetailsPage() {
 
                   <div>
                     <label style={styles.fieldLabel}>Applies To</label>
-                    <div style={styles.fieldShell}>
-                      <select
-                        style={styles.fieldInput}
+                    <div style={styles.fieldSelectShell}>
+                        <select
+                        style={styles.fieldSelect}
                         value={promo.appliesTo}
                         onChange={(e) =>
-                          updatePromoCode(promo.id, {
+                            updatePromoCode(promo.id, {
                             appliesTo: e.target.value as PromoAppliesTo,
                             selectedTicketIds:
-                              e.target.value === "selected_tickets"
+                                e.target.value === "selected_tickets"
                                 ? promo.selectedTicketIds
                                 : [],
                             selectedLocationIds:
-                              e.target.value === "selected_locations"
+                                e.target.value === "selected_locations"
                                 ? promo.selectedLocationIds
                                 : [],
-                          })
+                            })
                         }
-                      >
+                        >
                         <option value="whole_event">Whole Event</option>
                         <option value="all_tickets">All Tickets</option>
                         <option value="selected_tickets">Selected Tickets</option>
                         <option value="all_locations">All Locations</option>
                         <option value="selected_locations">Selected Locations</option>
-                      </select>
+                        </select>
+                        <div style={styles.fieldSelectIcon}>
+                        <ChevronDownIcon />
+                        </div>
                     </div>
                   </div>
 
