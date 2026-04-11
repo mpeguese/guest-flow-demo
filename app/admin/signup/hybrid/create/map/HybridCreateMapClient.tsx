@@ -6,8 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react"
 import { supabase } from "@/app/lib/supabase"
 
-
-
 const MAP_BUCKET = "venue-maps"
 
 type VenueMapRow = {
@@ -69,6 +67,29 @@ function ArrowRightIcon() {
   )
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  )
+}
+
 function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
@@ -105,6 +126,7 @@ export default function HybridCreateMapClient() {
   const [maps, setMaps] = useState<VenueMapRow[]>([])
   const [loadingMaps, setLoadingMaps] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [deletingMapId, setDeletingMapId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
 
   useEffect(() => {
@@ -124,6 +146,7 @@ export default function HybridCreateMapClient() {
         .from("venue_maps")
         .select("*")
         .eq("venue_id", venueId)
+        .eq("is_active", true)
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true })
 
@@ -145,6 +168,12 @@ export default function HybridCreateMapClient() {
       active = false
     }
   }, [venueId])
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -222,13 +251,13 @@ export default function HybridCreateMapClient() {
         console.error("venue_maps insert error:", insertError)
 
         try {
-            await supabase.storage.from(MAP_BUCKET).remove([filePath])
+          await supabase.storage.from(MAP_BUCKET).remove([filePath])
         } catch (cleanupError) {
-            console.error("storage cleanup error:", cleanupError)
+          console.error("storage cleanup error:", cleanupError)
         }
 
         throw insertError
-        }
+      }
 
       const createdMap = insertedMap as VenueMapRow
 
@@ -251,12 +280,64 @@ export default function HybridCreateMapClient() {
 
       const message =
         error instanceof Error
-        ? error.message
-        : JSON.stringify(error)
+          ? error.message
+          : JSON.stringify(error)
 
       setErrorMessage(message || "Unable to add map.")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDeleteMap = async (map: VenueMapRow) => {
+    const confirmed = window.confirm(
+      `Delete "${map.name}"?\n\nThis will remove the map from the UI and deactivate its mapped zone placements.`
+    )
+
+    if (!confirmed) return
+
+    setDeletingMapId(map.id)
+    setErrorMessage("")
+
+    try {
+      const { error: placementError } = await supabase
+        .from("venue_map_zones")
+        .update({ is_active: false })
+        .eq("venue_map_id", map.id)
+
+      if (placementError) {
+        throw placementError
+      }
+
+      const { error: mapError } = await supabase
+        .from("venue_maps")
+        .update({ is_active: false })
+        .eq("id", map.id)
+
+      if (mapError) {
+        throw mapError
+      }
+
+      if (map.storage_bucket && map.storage_path) {
+        try {
+          await supabase.storage.from(map.storage_bucket).remove([map.storage_path])
+        } catch (storageError) {
+          console.error("map storage cleanup error:", storageError)
+        }
+      }
+
+      setMaps((prev) => prev.filter((item) => item.id !== map.id))
+    } catch (error) {
+      console.error("Delete map failed:", error)
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to delete map."
+
+      setErrorMessage(message)
+    } finally {
+      setDeletingMapId(null)
     }
   }
 
@@ -424,7 +505,7 @@ export default function HybridCreateMapClient() {
       fontWeight: 600,
       color: "#0f172a",
       outline: "none",
-      resize: "vertical" as const,
+      resize: "vertical",
       fontFamily: "inherit",
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
@@ -471,7 +552,7 @@ export default function HybridCreateMapClient() {
     previewImage: {
       width: "100%",
       height: "100%",
-      objectFit: "cover" as const,
+      objectFit: "cover",
       display: "block",
     },
     filePill: {
@@ -545,8 +626,26 @@ export default function HybridCreateMapClient() {
     mapThumb: {
       width: "100%",
       height: "100%",
-      objectFit: "cover" as const,
+      objectFit: "cover",
       display: "block",
+    },
+    deleteMapBtn: {
+      position: "absolute",
+      top: 12,
+      right: 12,
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      border: "1px solid rgba(255,255,255,0.34)",
+      background: "rgba(255,255,255,0.22)",
+      color: "#dc2626",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      display: "grid",
+      placeItems: "center",
+      cursor: "pointer",
+      zIndex: 20,
+      boxShadow: "0 10px 22px rgba(15,23,42,0.10)",
     },
     mapBody: {
       padding: 16,
@@ -621,6 +720,25 @@ export default function HybridCreateMapClient() {
   return (
     <div style={styles.page}>
       <style jsx>{`
+        @media (max-width: 640px) {
+        .zones-title {
+          font-size: 34px !important;
+        }
+
+        .zones-map-card,
+        .zones-side-card {
+          min-height: auto !important;
+        }
+
+        .zones-map-frame {
+          min-height: 380px !important;
+        }
+
+        .zones-field-grid,
+        .zones-field-grid-3 {
+          grid-template-columns: 1fr !important;
+        }
+      }
         @media (max-width: 980px) {
           .map-layout {
             grid-template-columns: 1fr !important;
@@ -641,6 +759,7 @@ export default function HybridCreateMapClient() {
             font-size: 34px !important;
           }
         }
+          
       `}</style>
 
       <div style={styles.shell}>
@@ -753,46 +872,65 @@ export default function HybridCreateMapClient() {
                 <div style={styles.emptyState}>Loading maps...</div>
               ) : maps.length ? (
                 <div style={styles.mapGrid} className="map-grid">
-                  {maps.map((map) => (
-                    <div key={map.id} style={styles.mapCard}>
-                      <div style={styles.mapThumbWrap}>
-                        {map.image_url ? (
-                          <img src={map.image_url} alt={map.name} style={styles.mapThumb} />
-                        ) : null}
-                      </div>
+                  {maps.map((map) => {
+                    const isDeleting = deletingMapId === map.id
 
-                      <div style={styles.mapBody}>
-                        <div style={styles.mapName}>{map.name}</div>
-
-                        <div style={styles.mapMeta}>
-                          {map.floor_label ? (
-                            <div style={styles.metaPill}>{map.floor_label}</div>
+                    return (
+                      <div key={map.id} style={styles.mapCard}>
+                        <div style={styles.mapThumbWrap}>
+                          {map.image_url ? (
+                            <img src={map.image_url} alt={map.name} style={styles.mapThumb} />
                           ) : null}
 
-                          <div style={styles.metaPill}>Order {map.sort_order}</div>
-                        </div>
-
-                        <div style={styles.mapDescription}>
-                          {map.description || "No description added yet."}
-                        </div>
-
-                        <div style={styles.mapActions}>
                           <button
                             type="button"
-                            style={styles.mapActionBtn}
-                            onClick={() =>
-                              router.push(
-                                `/admin/signup/hybrid/create/zones/${map.id}?venueId=${venueId}`
-                              )
-                            }
+                            style={{
+                              ...styles.deleteMapBtn,
+                              opacity: isDeleting ? 0.7 : 1,
+                              cursor: isDeleting ? "not-allowed" : "pointer",
+                            }}
+                            disabled={isDeleting}
+                            onClick={() => void handleDeleteMap(map)}
+                            aria-label={`Delete ${map.name}`}
+                            title="Delete map"
                           >
-                            Edit Zones
-                            <ArrowRightIcon />
+                            <TrashIcon />
                           </button>
                         </div>
+
+                        <div style={styles.mapBody}>
+                          <div style={styles.mapName}>{map.name}</div>
+
+                          <div style={styles.mapMeta}>
+                            {map.floor_label ? (
+                              <div style={styles.metaPill}>{map.floor_label}</div>
+                            ) : null}
+
+                            <div style={styles.metaPill}>Order {map.sort_order}</div>
+                          </div>
+
+                          <div style={styles.mapDescription}>
+                            {map.description || "No description added yet."}
+                          </div>
+
+                          <div style={styles.mapActions}>
+                            <button
+                              type="button"
+                              style={styles.mapActionBtn}
+                              onClick={() =>
+                                router.push(
+                                  `/admin/signup/hybrid/create/zones/${map.id}?venueId=${venueId}`
+                                )
+                              }
+                            >
+                              Edit Zones
+                              <ArrowRightIcon />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div style={styles.emptyState}>

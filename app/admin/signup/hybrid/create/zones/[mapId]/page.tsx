@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type MouseEvent,
   type PointerEvent,
@@ -110,6 +111,30 @@ type ImageBox = {
   height: number
 }
 
+type ZoneDetailsForm = {
+  id: string
+  venue_id: string
+  code: string
+  name: string
+  slug: string
+  description: string
+  zone_type: string
+  access_type: string
+  capacity: string
+  min_guests: string
+  max_guests: string
+  base_price: string
+  deposit_amount: string
+  minimum_spend: string
+  currency: string
+  status: string
+  inventory_mode: string
+  display_order: string
+  image_url: string
+  notes: string
+  is_active: boolean
+}
+
 function TrashIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -135,6 +160,24 @@ function MinusIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M5 12h14" />
+    </svg>
+  )
+}
+
+function EditIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   )
 }
@@ -181,6 +224,51 @@ function computeContainedImageBox(
   return { left, top, width, height }
 }
 
+function toInputValue(value: number | string | null | undefined) {
+  if (value === null || value === undefined) return ""
+  return String(value)
+}
+
+function buildZoneDetailsForm(zone: VenueZoneRow): ZoneDetailsForm {
+  return {
+    id: zone.id,
+    venue_id: zone.venue_id,
+    code: zone.code || "",
+    name: zone.name || "",
+    slug: zone.slug || "",
+    description: zone.description || "",
+    zone_type: zone.zone_type || "table",
+    access_type: zone.access_type || "reservation",
+    capacity: toInputValue(zone.capacity),
+    min_guests: toInputValue(zone.min_guests),
+    max_guests: toInputValue(zone.max_guests),
+    base_price: toInputValue(zone.base_price),
+    deposit_amount: toInputValue(zone.deposit_amount),
+    minimum_spend: toInputValue(zone.minimum_spend),
+    currency: zone.currency || "USD",
+    status: zone.status || "active",
+    inventory_mode: zone.inventory_mode || "single",
+    display_order: toInputValue(zone.display_order),
+    image_url: zone.image_url || "",
+    notes: zone.notes || "",
+    is_active: Boolean(zone.is_active),
+  }
+}
+
+function parseNullableInt(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number.parseInt(trimmed, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function parseNullableNumber(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 export default function HybridZonesPage() {
   const router = useRouter()
   const params = useParams()
@@ -201,6 +289,11 @@ export default function HybridZonesPage() {
   const [panY, setPanY] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadingZoneDetails, setLoadingZoneDetails] = useState(false)
+  const [savingZoneDetails, setSavingZoneDetails] = useState(false)
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
+  const [selectedZoneDetails, setSelectedZoneDetails] = useState<VenueZoneRow | null>(null)
+  const [zoneForm, setZoneForm] = useState<ZoneDetailsForm | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
   const [imageBox, setImageBox] = useState<ImageBox>({
     left: 0,
@@ -352,6 +445,46 @@ export default function HybridZonesPage() {
     }
   }, [mapRecord?.image_width, mapRecord?.image_height])
 
+  useEffect(() => {
+    let active = true
+
+    async function loadSelectedZoneDetails() {
+      if (!selectedZone?.venueZoneId) {
+        setSelectedZoneDetails(null)
+        setZoneForm(null)
+        return
+      }
+
+      setLoadingZoneDetails(true)
+
+      const { data, error } = await supabase
+        .from("venue_zones")
+        .select("*")
+        .eq("id", selectedZone.venueZoneId)
+        .single()
+
+      if (!active) return
+
+      if (error) {
+        setErrorMessage(error.message || "Unable to load zone details.")
+        setSelectedZoneDetails(null)
+        setZoneForm(null)
+      } else {
+        const zoneRow = data as VenueZoneRow
+        setSelectedZoneDetails(zoneRow)
+        setZoneForm(buildZoneDetailsForm(zoneRow))
+      }
+
+      setLoadingZoneDetails(false)
+    }
+
+    void loadSelectedZoneDetails()
+
+    return () => {
+      active = false
+    }
+  }, [selectedZone?.venueZoneId])
+
   const toMapPercent = (clientX: number, clientY: number) => {
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect || !imageBox.width || !imageBox.height) return null
@@ -501,7 +634,28 @@ export default function HybridZonesPage() {
 
     if (error) {
       setErrorMessage(error.message || "Unable to save venue zone.")
+      return
     }
+
+    setSelectedZoneDetails((prev) =>
+      prev && prev.id === zone.venueZoneId
+        ? {
+            ...prev,
+            name: zone.name,
+            slug: nextSlug || null,
+          }
+        : prev
+    )
+
+    setZoneForm((prev) =>
+      prev && prev.id === zone.venueZoneId
+        ? {
+            ...prev,
+            name: zone.name,
+            slug: nextSlug || "",
+          }
+        : prev
+    )
   }
 
   const handleZonePointerDown = (
@@ -602,19 +756,46 @@ export default function HybridZonesPage() {
   }
 
   const handleDeleteZone = async (zone: ZoneRecord) => {
-    const { error } = await supabase
-      .from("venue_map_zones")
-      .update({ is_active: false })
-      .eq("id", zone.id)
+    const confirmed = window.confirm(
+      `Delete "${zone.name}"?\n\nThis will deactivate the zone placement and the underlying venue zone record.`
+    )
 
-    if (error) {
-      setErrorMessage(error.message || "Unable to remove zone placement.")
-      return
+    if (!confirmed) return
+
+    setSaving(true)
+    setErrorMessage("")
+
+    try {
+      const { error: placementError } = await supabase
+        .from("venue_map_zones")
+        .update({ is_active: false })
+        .eq("id", zone.id)
+
+      if (placementError) {
+        throw placementError
+      }
+
+      const { error: venueZoneError } = await supabase
+        .from("venue_zones")
+        .update({ is_active: false })
+        .eq("id", zone.venueZoneId)
+
+      if (venueZoneError) {
+        throw venueZoneError
+      }
+
+      setZones((prev) => prev.filter((item) => item.id !== zone.id))
+      setSelectedZoneId((prev) => (prev === zone.id ? null : prev))
+      setDragState((prev) => (prev?.zoneId === zone.id ? null : prev))
+      setSelectedZoneDetails((prev) => (prev?.id === zone.venueZoneId ? null : prev))
+      setZoneForm((prev) => (prev?.id === zone.venueZoneId ? null : prev))
+      setIsZoneModalOpen(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to remove zone."
+      setErrorMessage(message)
+    } finally {
+      setSaving(false)
     }
-
-    setZones((prev) => prev.filter((item) => item.id !== zone.id))
-    setSelectedZoneId((prev) => (prev === zone.id ? null : prev))
-    setDragState((prev) => (prev?.zoneId === zone.id ? null : prev))
   }
 
   const handleSelectedZoneFieldChange = async (
@@ -638,6 +819,110 @@ export default function HybridZonesPage() {
       updates.height !== undefined
     ) {
       await savePlacementToDb(merged)
+    }
+  }
+
+  const openZoneDetailsModal = () => {
+    if (!selectedZone) return
+    setIsZoneModalOpen(true)
+  }
+
+  const closeZoneDetailsModal = () => {
+    setIsZoneModalOpen(false)
+  }
+
+  const handleZoneFormChange = (
+    field: keyof ZoneDetailsForm,
+    value: string | boolean
+  ) => {
+    setZoneForm((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [field]: value,
+      }
+    })
+  }
+
+  const handleSaveZoneDetails = async () => {
+    if (!selectedZone || !zoneForm) return
+
+    const trimmedName = zoneForm.name.trim()
+    const trimmedCode = zoneForm.code.trim()
+
+    if (!trimmedName) {
+      setErrorMessage("Zone name is required.")
+      return
+    }
+
+    if (!trimmedCode) {
+      setErrorMessage("Zone code is required.")
+      return
+    }
+
+    setSavingZoneDetails(true)
+    setErrorMessage("")
+
+    try {
+      const nextSlug = zoneForm.slug.trim() || slugify(trimmedName)
+
+      const updatePayload = {
+        code: trimmedCode,
+        name: trimmedName,
+        slug: nextSlug || null,
+        description: zoneForm.description.trim() || null,
+        zone_type: zoneForm.zone_type.trim() || "table",
+        access_type: zoneForm.access_type.trim() || "reservation",
+        capacity: parseNullableInt(zoneForm.capacity),
+        min_guests: parseNullableInt(zoneForm.min_guests),
+        max_guests: parseNullableInt(zoneForm.max_guests),
+        base_price: parseNullableNumber(zoneForm.base_price),
+        deposit_amount: parseNullableNumber(zoneForm.deposit_amount),
+        minimum_spend: parseNullableNumber(zoneForm.minimum_spend),
+        currency: zoneForm.currency.trim() || "USD",
+        status: zoneForm.status.trim() || "active",
+        inventory_mode: zoneForm.inventory_mode.trim() || "single",
+        display_order: parseNullableInt(zoneForm.display_order) ?? 0,
+        image_url: zoneForm.image_url.trim() || null,
+        notes: zoneForm.notes.trim() || null,
+        is_active: Boolean(zoneForm.is_active),
+      }
+
+      const { data, error } = await supabase
+        .from("venue_zones")
+        .update(updatePayload)
+        .eq("id", selectedZone.venueZoneId)
+        .select("*")
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const updatedZone = data as VenueZoneRow
+
+      setSelectedZoneDetails(updatedZone)
+      setZoneForm(buildZoneDetailsForm(updatedZone))
+
+      setZones((prev) =>
+        prev.map((zone) =>
+          zone.id === selectedZone.id
+            ? {
+                ...zone,
+                name: updatedZone.name,
+                code: updatedZone.code,
+              }
+            : zone
+        )
+      )
+
+      closeZoneDetailsModal()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to save zone details."
+      setErrorMessage(message)
+    } finally {
+      setSavingZoneDetails(false)
     }
   }
 
@@ -855,7 +1140,7 @@ export default function HybridZonesPage() {
       transformOrigin: "top left",
       willChange: "transform",
     },
-    imageBox: {
+    imageBoxStyle: {
       position: "absolute",
       overflow: "hidden",
       borderRadius: 4,
@@ -863,7 +1148,7 @@ export default function HybridZonesPage() {
     mapImageEl: {
       width: "100%",
       height: "100%",
-      objectFit: "contain" as const,
+      objectFit: "contain",
       display: "block",
       pointerEvents: "none",
     },
@@ -956,6 +1241,24 @@ export default function HybridZonesPage() {
       fontWeight: 700,
       color: "#64748b",
     },
+    zoneActionRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      flexShrink: 0,
+    },
+    editMiniBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      border: "1px solid rgba(15,23,42,0.12)",
+      background: "rgba(255,255,255,0.16)",
+      color: "#0f172a",
+      display: "grid",
+      placeItems: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
     deleteBtn: {
       width: 38,
       height: 38,
@@ -991,6 +1294,14 @@ export default function HybridZonesPage() {
       gridTemplateColumns: "1fr 1fr",
       gap: 12,
     },
+    fieldGridThree: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 12,
+    },
+    fullField: {
+      gridColumn: "1 / -1",
+    },
     label: {
       display: "block",
       marginBottom: 8,
@@ -1004,6 +1315,22 @@ export default function HybridZonesPage() {
       width: "100%",
       height: 48,
       borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.30)",
+      background: "rgba(255,255,255,0.22)",
+      padding: "0 14px",
+      boxSizing: "border-box",
+      fontSize: 14,
+      fontWeight: 700,
+      color: "#0f172a",
+      outline: "none",
+      backdropFilter: "blur(14px)",
+      WebkitBackdropFilter: "blur(14px)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+    },
+    select: {
+      width: "100%",
+      height: 48,
+      borderRadius: 16,
       border: "1px solid rgba(255,255,255,0.18)",
       background: "rgba(255,255,255,0.10)",
       padding: "0 14px",
@@ -1014,13 +1341,162 @@ export default function HybridZonesPage() {
       outline: "none",
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
+      appearance: "none",
     },
-    actions: {
+    textarea: {
+      width: "100%",
+      minHeight: 100,
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.18)",
+      background: "rgba(255,255,255,0.10)",
+      padding: 14,
+      boxSizing: "border-box",
+      fontSize: 14,
+      fontWeight: 600,
+      color: "#0f172a",
+      outline: "none",
+      resize: "vertical",
+      fontFamily: "inherit",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+    },
+    toggleRow: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      minHeight: 52,
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.18)",
+      background: "rgba(255,255,255,0.10)",
+      padding: "0 14px",
+    },
+    toggleLabel: {
+      fontSize: 14,
+      fontWeight: 800,
+      color: "#0f172a",
+    },
+    checkbox: {
+      width: 18,
+      height: 18,
+      cursor: "pointer",
+    },
+    editorActionRow: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+    },
+    secondaryBtn: {
+      minWidth: 150,
+      height: 46,
+      borderRadius: 14,
+      border: "1px solid rgba(15,23,42,0.10)",
+      background: "rgba(255,255,255,0.18)",
+      color: "#0f172a",
+      fontSize: 13,
+      fontWeight: 900,
+      cursor: "pointer",
+    },
+    modalBackdrop: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(2,6,23,0.44)",
+      backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
+      zIndex: 80,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 18,
+    },
+    modalSheet: {
+      width: "min(920px, 100%)",
+      maxHeight: "min(88vh, 920px)",
+      overflow: "auto",
+      borderRadius: 20,
+      background: "rgba(255,255,255,0.14)",
+      border: "1px solid rgba(255,255,255,0.65)",
+      boxShadow: "0 24px 60px rgba(15,23,42,0.16)",
+      backdropFilter: "blur(22px)",
+      WebkitBackdropFilter: "blur(22px)",
+      padding: 20,
+    },
+    modalHeader: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 14,
+      position: "sticky",
+      top: 0,
+      zIndex: 2,
+      //background: "rgba(248,250,252,0.96)",
+      padding: "4px 2px 12px",
+    },
+    modalTitleWrap: {
+      display: "grid",
+      gap: 6,
+    },
+    modalTitle: {
+      fontSize: 24,
+      fontWeight: 900,
+      color: "#020617",
+      letterSpacing: "-0.6px",
+    },
+    modalSub: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#64748b",
+    },
+    modalScrollBody: {
+      overflowY: "auto",
+      maxHeight: "min(88vh, 920px)",
+      padding: 20,
+      scrollbarWidth: "thin",
+    },
+    closeBtn: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      border: "1px solid rgba(15,23,42,0.10)",
+      background: "rgba(255,255,255,0.22)",
+      color: "#0f172a",
+      display: "grid",
+      placeItems: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
+    modalSection: {
+      marginTop: 12,
+      borderRadius: 22,
+      padding: 16,
+      background: "rgba(255,255,255,0.16)",
+      border: "1px solid rgba(255,255,255,0.28)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)",
+      display: "grid",
+      gap: 14,
+    },
+   modalSectionTitle: {
+      fontSize: 11,
+      fontWeight: 900,
+      letterSpacing: "1.4px",
+      textTransform: "uppercase",
+      color: "#334155",
+    },
+    modalFooter: {
       marginTop: 18,
       display: "flex",
       justifyContent: "space-between",
       gap: 12,
       flexWrap: "wrap",
+      position: "sticky",
+      bottom: 0,
+      paddingTop: 12,
+      //background: "linear-gradient(180deg, rgba(248,250,252,0) 0%, rgba(248,250,252,0.72) 38%)",
+      //backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
     },
     ghostBtn: {
       display: "inline-flex",
@@ -1054,35 +1530,76 @@ export default function HybridZonesPage() {
   return (
     <div style={styles.page}>
       <style jsx>{`
-        @media (max-width: 980px) {
-          .zones-layout {
-            grid-template-columns: 1fr !important;
-          }
+  .zones-modal-sheet::-webkit-scrollbar {
+    width: 10px;
+  }
 
-          .zones-field-grid {
-            grid-template-columns: 1fr 1fr !important;
-          }
-        }
+  .zones-modal-sheet::-webkit-scrollbar-track {
+    margin-top: 22px;
+    margin-bottom: 22px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+  }
 
-        @media (max-width: 640px) {
-          .zones-title {
-            font-size: 34px !important;
-          }
+  .zones-modal-sheet::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(15,23,42,0.28);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
 
-          .zones-map-card,
-          .zones-side-card {
-            min-height: auto !important;
-          }
+  @media (max-width: 980px) {
+    .zones-layout {
+      grid-template-columns: 1fr !important;
+    }
 
-          .zones-map-frame {
-            min-height: 380px !important;
-          }
+    .zones-field-grid {
+      grid-template-columns: 1fr 1fr !important;
+    }
 
-          .zones-field-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
+    .zones-field-grid-3 {
+      grid-template-columns: 1fr 1fr !important;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .zones-modal-sheet {
+      width: 100% !important;
+      max-height: 92vh !important;
+      border-bottom-left-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+      border-top-left-radius: 26px !important;
+      border-top-right-radius: 26px !important;
+      align-self: flex-end !important;
+      margin-top: auto !important;
+    }
+
+    .zones-modal-backdrop {
+      align-items: flex-end !important;
+      padding: 0 !important;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .zones-title {
+      font-size: 34px !important;
+    }
+
+    .zones-map-card,
+    .zones-side-card {
+      min-height: auto !important;
+    }
+
+    .zones-map-frame {
+      min-height: 380px !important;
+    }
+
+    .zones-field-grid,
+    .zones-field-grid-3 {
+      grid-template-columns: 1fr !important;
+    }
+  }
+`}</style>
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
@@ -1102,7 +1619,7 @@ export default function HybridZonesPage() {
             Edit venue zones for this map
           </div>
           <div style={styles.summary}>
-            Zones now anchor to the true rendered image area, so they stay aligned when the window resizes.
+            Zones stay anchored to the rendered image area, while zone details can now be edited separately from placement.
           </div>
 
           <div style={styles.mapIdPill}>
@@ -1117,7 +1634,7 @@ export default function HybridZonesPage() {
             <div style={styles.helperPill}>Click to add zone</div>
             <div style={styles.helperPill}>Drag zone to move</div>
             <div style={styles.helperPill}>Drag canvas to pan</div>
-            <div style={styles.helperPill}>Changes save automatically</div>
+            <div style={styles.helperPill}>Zone details edit separately</div>
           </div>
 
           <div style={styles.layout} className="zones-layout">
@@ -1183,7 +1700,7 @@ export default function HybridZonesPage() {
                   >
                     <div
                       style={{
-                        ...styles.imageBox,
+                        ...styles.imageBoxStyle,
                         left: imageBox.left,
                         top: imageBox.top,
                         width: imageBox.width,
@@ -1209,7 +1726,10 @@ export default function HybridZonesPage() {
                           type="button"
                           data-zone="true"
                           onPointerDown={(event) => handleZonePointerDown(event, zone)}
-                          onClick={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelectedZoneId(zone.id)
+                          }}
                           style={{
                             ...styles.zoneBox,
                             ...(selected ? styles.zoneBoxSelected : null),
@@ -1255,17 +1775,34 @@ export default function HybridZonesPage() {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void handleDeleteZone(zone)
-                          }}
-                          style={styles.deleteBtn}
-                          aria-label={`Remove ${zone.name}`}
-                        >
-                          <TrashIcon />
-                        </button>
+                        <div style={styles.zoneActionRow}>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setSelectedZoneId(zone.id)
+                              setIsZoneModalOpen(true)
+                            }}
+                            style={styles.editMiniBtn}
+                            aria-label={`Edit details for ${zone.name}`}
+                            title="Edit details"
+                          >
+                            <EditIcon />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void handleDeleteZone(zone)
+                            }}
+                            style={styles.deleteBtn}
+                            aria-label={`Remove ${zone.name}`}
+                            title="Delete zone"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
                       </div>
                     )
                   })}
@@ -1350,12 +1887,31 @@ export default function HybridZonesPage() {
                       />
                     </div>
                   </div>
+
+                  <div style={styles.editorActionRow}>
+                    <button
+                      type="button"
+                      style={styles.secondaryBtn}
+                      onClick={openZoneDetailsModal}
+                      disabled={loadingZoneDetails}
+                    >
+                      {loadingZoneDetails ? "Loading details..." : "Edit Zone Details"}
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.secondaryBtn}
+                      onClick={() => void handleDeleteZone(selectedZone)}
+                    >
+                      Delete Zone
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div style={styles.actions}>
+          <div style={styles.modalFooter}>
             <Link
               href={`/admin/signup/hybrid/create/map?venueId=${venueIdFromQuery || mapRecord?.venue_id || ""}`}
               style={styles.ghostBtn}
@@ -1378,6 +1934,321 @@ export default function HybridZonesPage() {
           </div>
         </section>
       </div>
+
+      {isZoneModalOpen && zoneForm ? (
+        <div
+          style={styles.modalBackdrop}
+          className="zones-modal-backdrop"
+          onClick={closeZoneDetailsModal}
+        >
+          <div
+            style={styles.modalSheet}
+            className="zones-modal-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={styles.modalHeader}>
+              <div style={styles.modalTitleWrap}>
+                <div style={styles.modalTitle}>Edit Zone Details</div>
+                <div style={styles.modalSub}>
+                  {zoneForm.name || "Selected zone"} · {zoneForm.code || "No code"}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                style={styles.closeBtn}
+                onClick={closeZoneDetailsModal}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <div style={styles.modalSection}>
+              <div style={styles.modalSectionTitle}>Core Details</div>
+
+              <div style={styles.fieldGrid} className="zones-field-grid">
+                <div>
+                  <label style={styles.label}>Zone Name</label>
+                  <input
+                    style={styles.input}
+                    value={zoneForm.name}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("name", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Code</label>
+                  <input
+                    style={styles.input}
+                    value={zoneForm.code}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("code", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div style={styles.fullField}>
+                  <label style={styles.label}>Slug</label>
+                  <input
+                    style={styles.input}
+                    value={zoneForm.slug}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("slug", e.target.value)
+                    }
+                    placeholder="Leave blank to auto-generate from name"
+                  />
+                </div>
+
+                <div style={styles.fullField}>
+                  <label style={styles.label}>Description</label>
+                  <textarea
+                    style={styles.textarea}
+                    value={zoneForm.description}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                      handleZoneFormChange("description", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.modalSection}>
+              <div style={styles.modalSectionTitle}>Commercial Settings</div>
+
+              <div style={styles.fieldGridThree} className="zones-field-grid-3">
+                <div>
+                  <label style={styles.label}>Zone Type</label>
+                  <select
+                    style={styles.select}
+                    value={zoneForm.zone_type}
+                    onChange={(e) => handleZoneFormChange("zone_type", e.target.value)}
+                  >
+                    <option value="table">table</option>
+                    <option value="section">section</option>
+                    <option value="standing">standing</option>
+                    <option value="seat">seat</option>
+                    <option value="bar">bar</option>
+                    <option value="cabana">cabana</option>
+                    <option value="booth">booth</option>
+                    <option value="general">general</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Access Type</label>
+                  <select
+                    style={styles.select}
+                    value={zoneForm.access_type}
+                    onChange={(e) => handleZoneFormChange("access_type", e.target.value)}
+                  >
+                    <option value="reservation">reservation</option>
+                    <option value="ticket">ticket</option>
+                    <option value="guestlist">guestlist</option>
+                    <option value="admission">admission</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Currency</label>
+                  <input
+                    style={styles.input}
+                    value={zoneForm.currency}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("currency", e.target.value.toUpperCase())
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Capacity</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={zoneForm.capacity}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("capacity", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Min Guests</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={zoneForm.min_guests}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("min_guests", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Max Guests</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={zoneForm.max_guests}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("max_guests", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Base Price</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    step="0.01"
+                    value={zoneForm.base_price}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("base_price", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Deposit Amount</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    step="0.01"
+                    value={zoneForm.deposit_amount}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("deposit_amount", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Minimum Spend</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    step="0.01"
+                    value={zoneForm.minimum_spend}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("minimum_spend", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.modalSection}>
+              <div style={styles.modalSectionTitle}>Behavior & Display</div>
+
+              <div style={styles.fieldGridThree} className="zones-field-grid-3">
+                <div>
+                  <label style={styles.label}>Status</label>
+                  <select
+                    style={styles.select}
+                    value={zoneForm.status}
+                    onChange={(e) => handleZoneFormChange("status", e.target.value)}
+                  >
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                    <option value="draft">draft</option>
+                    <option value="hidden">hidden</option>
+                    <option value="sold_out">sold_out</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Inventory Mode</label>
+                  <select
+                    style={styles.select}
+                    value={zoneForm.inventory_mode}
+                    onChange={(e) => handleZoneFormChange("inventory_mode", e.target.value)}
+                  >
+                    <option value="single">single</option>
+                    <option value="shared">shared</option>
+                    <option value="pooled">pooled</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Display Order</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={zoneForm.display_order}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("display_order", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div style={styles.fullField}>
+                  <div style={styles.toggleRow}>
+                    <div style={styles.toggleLabel}>Zone Active</div>
+                    <input
+                      style={styles.checkbox}
+                      type="checkbox"
+                      checked={zoneForm.is_active}
+                      onChange={(e) => handleZoneFormChange("is_active", e.target.checked)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.modalSection}>
+              <div style={styles.modalSectionTitle}>Optional Media & Notes</div>
+
+              <div style={styles.fieldGrid} className="zones-field-grid">
+                <div style={styles.fullField}>
+                  <label style={styles.label}>Image URL</label>
+                  <input
+                    style={styles.input}
+                    value={zoneForm.image_url}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleZoneFormChange("image_url", e.target.value)
+                    }
+                  />
+                </div>
+
+                <div style={styles.fullField}>
+                  <label style={styles.label}>Notes</label>
+                  <textarea
+                    style={styles.textarea}
+                    value={zoneForm.notes}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                      handleZoneFormChange("notes", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button
+                type="button"
+                style={styles.ghostBtn}
+                onClick={closeZoneDetailsModal}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.primaryBtn,
+                  opacity: savingZoneDetails ? 0.7 : 1,
+                }}
+                onClick={() => void handleSaveZoneDetails()}
+                disabled={savingZoneDetails}
+              >
+                {savingZoneDetails ? "Saving..." : "Save Zone Details"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
