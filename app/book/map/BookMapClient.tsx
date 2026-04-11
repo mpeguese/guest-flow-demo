@@ -169,6 +169,13 @@ type ActiveEventMeta = {
   mapImageSrc: string
 }
 
+type ActiveVenueMapMeta = {
+  id: string
+  name: string
+  floorLabel?: string | null
+  imageUrl: string
+}
+
 type VenueMapRow = {
   id: string
   venue_id: string
@@ -1364,6 +1371,16 @@ function DiamondIcon() {
   )
 }
 
+function MapFoldIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6" />
+      <line x1="9" y1="3" x2="9" y2="18" />
+      <line x1="15" y1="6" x2="15" y2="21" />
+    </svg>
+  )
+}
+
 function PulseIcon() {
   return (
     <Image
@@ -1485,7 +1502,6 @@ function normalizeVenueZoneForBooking(args: {
     description: venueZone.description || "Venue reservation area",
     perks: [],
     svgId: venueZone.code || venueZone.id,
-
     code: venueZone.code || null,
     mapZoneId: placement.id,
     xPct: Number(placement.x_pct),
@@ -1498,6 +1514,176 @@ function normalizeVenueZoneForBooking(args: {
         : 0,
     zIndex: Number(placement.z_index || 1),
   }
+}
+
+function MapPickerModal({
+  open,
+  onClose,
+  maps,
+  selectedMapId,
+  onSelectMap,
+}: {
+  open: boolean
+  onClose: () => void
+  maps: ActiveVenueMapMeta[]
+  selectedMapId: string
+  onSelectMap: (mapId: string) => void
+}) {
+  if (!open) return null
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 130,
+          background: "rgba(15,23,42,0.22)",
+          backdropFilter: "blur(6px)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 131,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "100%",
+            borderRadius: "30px 30px 0 0",
+            background: "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 100%)",
+            border: `1px solid ${COLORS.border}`,
+            boxShadow: "0 28px 56px rgba(15,23,42,0.18)",
+            padding: "14px 16px 20px",
+            pointerEvents: "auto",
+          }}
+        >
+          <div style={{ paddingTop: 4, display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                width: 46,
+                height: 5,
+                borderRadius: 999,
+                background: "#C9DCE2",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginTop: 10,
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: 1,
+                  color: COLORS.textMuted,
+                  marginBottom: 6,
+                }}
+              >
+                VENUE MAPS
+              </div>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  color: COLORS.text,
+                  letterSpacing: -0.5,
+                }}
+              >
+                Choose a map
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 14,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.card,
+                color: COLORS.text,
+                fontSize: 22,
+                fontWeight: 800,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+              aria-label="Close map picker"
+            >
+              ×
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {maps.map((map) => {
+              const selected = map.id === selectedMapId
+              return (
+                <button
+                  key={map.id}
+                  onClick={() => onSelectMap(map.id)}
+                  style={{
+                    minHeight: 56,
+                    borderRadius: 18,
+                    border: selected
+                      ? "1px solid rgba(14,165,233,0.24)"
+                      : `1px solid ${COLORS.border}`,
+                    background: selected ? COLORS.primarySoft : COLORS.card,
+                    color: COLORS.text,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0 16px",
+                    textAlign: "left",
+                    boxShadow: selected
+                      ? "0 12px 24px rgba(14,165,233,0.14)"
+                      : "0 10px 20px rgba(15,23,42,0.05)",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 900 }}>{map.name}</div>
+                    {map.floorLabel ? (
+                      <div style={{ marginTop: 2, fontSize: 12, color: COLORS.textMuted }}>
+                        {map.floorLabel}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: selected ? COLORS.primaryHover : COLORS.textMuted,
+                    }}
+                  >
+                    {selected ? "Selected" : "Open"}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </>
+  )
 }
 
 export default function BookMapPage() {
@@ -1521,12 +1707,18 @@ export default function BookMapPage() {
   const eventSlug = sp.get("event") || ""
   const isEventMode = !!eventSlug
 
-   const venueId = sp.get("venueId") || ""
+  const venueId = sp.get("venueId") || ""
+  const mapIdFromQuery = sp.get("mapId") || ""
   const isVenueMode = !!venueId && !eventSlug
   
 
   const [activeEvent, setActiveEvent] = useState<ActiveEventMeta | null>(null)
-  const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+  //const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+
+  const [venueMaps, setVenueMaps] = useState<ActiveVenueMapMeta[]>([])
+  const [selectedVenueMapId, setSelectedVenueMapId] = useState("")
+  
+  const [mapPickerOpen, setMapPickerOpen] = useState(false)
   
   const [selectedZoneId, setSelectedZoneId] = useState<string | undefined>()
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -1555,10 +1747,13 @@ export default function BookMapPage() {
   const [zonesLoading, setZonesLoading] = useState(false)
   const [dbStatusByZoneId, setDbStatusByZoneId] = useState<Record<string, ZoneStatus>>({})
 
+    const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
+
   const [activeVenueMap, setActiveVenueMap] = useState<{
     id: string
     name: string
     imageUrl: string
+    floorLabel?: string | null
   } | null>(null)
 
   const [dbVenueZones, setDbVenueZones] = useState<BookingMapZone[] | null>(null)
@@ -1650,46 +1845,89 @@ export default function BookMapPage() {
   }
 }, [eventSlug])
 
-
 useEffect(() => {
   let cancelled = false
 
-  async function loadVenueMapAndZones() {
+  async function loadVenueMaps() {
     if (!isVenueMode || !venueId) {
+      setVenueMaps([])
+      setSelectedVenueMapId("")
       setActiveVenueMap(null)
-      setDbVenueZones(null)
+      setDbZones(null)
       return
     }
 
-    setVenueZonesLoading(true)
-
     try {
-      const { data: mapRow, error: mapError } = await supabase
+      const { data: mapsData, error: mapsError } = await supabase
         .from("venue_maps")
         .select("*")
         .eq("venue_id", venueId)
         .eq("is_active", true)
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle()
 
-      if (mapError) throw mapError
+      if (mapsError) throw mapsError
 
-      if (!mapRow) {
-        if (!cancelled) {
-          setActiveVenueMap(null)
-          setDbVenueZones([])
-        }
-        return
+      const maps = ((mapsData as VenueMapRow[]) || []).map((map) => ({
+        id: map.id,
+        name: map.name,
+        floorLabel: map.floor_label,
+        imageUrl: map.image_url || "",
+      }))
+
+      if (cancelled) return
+
+      setVenueMaps(maps)
+
+      const initialMapId =
+        mapIdFromQuery || maps[0]?.id || ""
+
+      setSelectedVenueMapId(initialMapId)
+      setActiveVenueMap(
+        maps.find((map) => map.id === initialMapId) || maps[0] || null
+      )
+    } catch (error) {
+      console.error("Error loading venue maps:", error)
+      if (!cancelled) {
+        setVenueMaps([])
+        setSelectedVenueMapId("")
+        setActiveVenueMap(null)
+        setDbZones(null)
       }
+    }
+  }
 
-      const venueMap = mapRow as VenueMapRow
+  loadVenueMaps()
+
+  return () => {
+    cancelled = true
+  }
+}, [isVenueMode, venueId, mapIdFromQuery])
+
+useEffect(() => {
+  let cancelled = false
+
+  async function loadSelectedVenueMapZones() {
+    if (!isVenueMode || !selectedVenueMapId) {
+      setDbVenueZones([])
+      return
+    }
+
+    setZonesLoading(true)
+    setDbVenueZones([])
+
+    try {
+      const activeMap =
+        venueMaps.find((map) => map.id === selectedVenueMapId) || null
+
+      if (!cancelled) {
+        setActiveVenueMap(activeMap)
+      }
 
       const { data: placementRows, error: placementError } = await supabase
         .from("venue_map_zones")
         .select("*")
-        .eq("venue_map_id", venueMap.id)
+        .eq("venue_map_id", selectedVenueMapId)
         .eq("is_active", true)
         .order("z_index", { ascending: true })
         .order("created_at", { ascending: true })
@@ -1702,14 +1940,14 @@ useEffect(() => {
       let zoneRows: VenueZoneRow[] = []
 
       if (venueZoneIds.length > 0) {
-        const { data, error } = await supabase
+        const { data: zonesData, error: zonesError } = await supabase
           .from("venue_zones")
           .select("*")
           .in("id", venueZoneIds)
           .eq("is_active", true)
 
-        if (error) throw error
-        zoneRows = (data as VenueZoneRow[]) || []
+        if (zonesError) throw zonesError
+        zoneRows = (zonesData as VenueZoneRow[]) || []
       }
 
       const zoneMap = new Map(zoneRows.map((zone) => [zone.id, zone]))
@@ -1718,41 +1956,34 @@ useEffect(() => {
         .map((placement) => {
           const venueZone = zoneMap.get(placement.venue_zone_id)
           if (!venueZone) return null
-
-          return normalizeVenueZoneForBooking({
-            venueZone,
-            placement,
-          })
+          return normalizeVenueZoneForBooking({ venueZone, placement })
         })
-        .filter(Boolean) as VenueZone[]
+        .filter(Boolean) as BookingMapZone[]
 
       if (!cancelled) {
-        setActiveVenueMap({
-          id: venueMap.id,
-          name: venueMap.name,
-          imageUrl: venueMap.image_url || "",
-        })
         setDbVenueZones(normalizedZones)
       }
     } catch (error) {
-      console.error("Error loading venue map/zones:", error)
+      console.error("Error loading selected venue map zones:", error)
       if (!cancelled) {
-        setActiveVenueMap(null)
-        setDbVenueZones(null)
+        setDbVenueZones([])
       }
     } finally {
       if (!cancelled) {
-        setVenueZonesLoading(false)
+        setZonesLoading(false)
       }
     }
   }
 
-  void loadVenueMapAndZones()
+  loadSelectedVenueMapZones()
 
   return () => {
     cancelled = true
   }
-}, [isVenueMode, venueId])
+}, [isVenueMode, selectedVenueMapId, venueMaps])
+
+
+
 
   useEffect(() => {
   let cancelled = false
@@ -2013,6 +2244,36 @@ useEffect(() => {
     const params = new URLSearchParams(sp.toString())
     params.set("date", nextDateKey)
     router.replace(`/book/map?${params.toString()}`)
+  }
+
+  function updateSelectedMap(nextMapId: string) {
+  const params = new URLSearchParams(sp.toString())
+
+  if (venueId) {
+    params.set("venueId", venueId)
+  }
+
+  if (nextMapId) {
+    params.set("mapId", nextMapId)
+  } else {
+    params.delete("mapId")
+  }
+
+  router.replace(`/book/map?${params.toString()}`)
+  }
+
+  function handleSelectMap(nextMapId: string) {
+    setMapPickerOpen(false)
+    setSelectedZoneId(undefined)
+    setDetailsOpen(false)
+    setDbZones([])
+    setSelectedVenueMapId(nextMapId)
+
+    const nextMap =
+      venueMaps.find((map) => map.id === nextMapId) || null
+
+    setActiveVenueMap(nextMap)
+    updateSelectedMap(nextMapId)
   }
 
   function handleDateSelected(nextDateValue: Date) {
@@ -2564,6 +2825,29 @@ useEffect(() => {
               />
             )}
 
+            {isVenueMode && venueMaps.length > 1 ? (
+              <button
+                onClick={() => setMapPickerOpen(true)}
+                aria-label="Switch map"
+                title="Switch map"
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 999,
+                  border: `1px solid rgba(217,232,236,0.88)`,
+                  background: "rgba(255,255,255,0.92)",
+                  color: COLORS.text,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+                }}
+              >
+                <MapFoldIcon />
+              </button>
+            ) : null}
+
             <button
               onClick={() => router.push("/book/cart")}
               aria-label="Open cart"
@@ -2793,6 +3077,14 @@ useEffect(() => {
           previewImageAlt={
             activeEvent ? `${activeEvent.name} seating preview` : undefined
   }
+        />
+
+        <MapPickerModal
+          open={mapPickerOpen}
+          onClose={() => setMapPickerOpen(false)}
+          maps={venueMaps}
+          selectedMapId={selectedVenueMapId}
+          onSelectMap={handleSelectMap}
         />
 
         <AreaSelectionModal

@@ -45,14 +45,14 @@ type RenderHotspot = {
 
 function getFill(status: ZoneStatus, selected: boolean) {
   if (selected) return "rgba(255, 209, 102, 0.94)"
-  if (status === "available") return "rgba(255,255,255,0.16)"
+  if (status === "available") return "rgba(255,255,255,0.0)"
   if (status === "limited") return "rgba(245, 158, 11, 0.44)"
   return "rgba(239, 68, 68, 0.42)"
 }
 
 function getStroke(status: ZoneStatus, selected: boolean) {
   if (selected) return "rgba(255, 209, 102, 1)"
-  if (status === "available") return "rgba(255,255,255,0.38)"
+  if (status === "available") return "rgba(255,255,255,0.3)"
   if (status === "limited") return "rgba(245, 158, 11, 0.96)"
   return "rgba(239, 68, 68, 0.96)"
 }
@@ -82,7 +82,7 @@ function MapControls({ bottomOffset = 96 }: { bottomOffset?: number }) {
   const buttonStyle: React.CSSProperties = {
     width: 40,
     height: 40,
-    borderRadius: 14,
+    borderRadius: 10,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(10,18,27,0.82)",
     color: "#fff",
@@ -172,7 +172,8 @@ export default function VenueMap({
 
         return {
           zoneId: zone.id,
-          label: zone.code?.trim() || zone.name,
+          //label: zone.code?.trim() || zone.name,
+          label: zone.name?.trim() || zone.code?.trim() || zone.id,
           xPct,
           yPct,
           wPct,
@@ -395,7 +396,7 @@ export default function VenueMap({
                           width: `${spot.wPct}%`,
                           height: `${spot.hPct}%`,
                           zIndex: spot.zIndex,
-                          borderRadius: 16,
+                          borderRadius: 10,
                           border: `2px solid ${getStroke(status, isSelected)}`,
                           background: getFill(status, isSelected),
                           boxShadow: isSelected
