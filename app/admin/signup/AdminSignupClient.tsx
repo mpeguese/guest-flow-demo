@@ -12,7 +12,7 @@ type SignupContent = {
   summary: string
 }
 
-type IntentType = "event" | "venue" | "hybrid"
+type IntentType = "event" | "hybrid"
 
 function getIntentFromUrl(): IntentType {
   if (typeof window === "undefined") return "event"
@@ -20,15 +20,12 @@ function getIntentFromUrl(): IntentType {
   const params = new URLSearchParams(window.location.search)
   const rawIntent = (params.get("intent") || "").trim().toLowerCase()
 
-  if (rawIntent === "venue") return "venue"
   if (rawIntent === "hybrid") return "hybrid"
   return "event"
 }
 
 function getIntentRoute(intent: IntentType) {
   switch (intent) {
-    case "venue":
-      return "/admin/signup/venue/create"
     case "hybrid":
       return "/admin/signup/hybrid/create"
     case "event":

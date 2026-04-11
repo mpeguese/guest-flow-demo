@@ -22,6 +22,7 @@ import { passProducts } from "@/app/lib/book-pass-data"
 import { useBookingCart } from "@/app/lib/booking-cart"
 import Image from "next/image"
 import dynamic from "next/dynamic"
+import { supabase } from "@/app/lib/supabase"
 
 const VenueMap = dynamic(() => import("@/app/components/booking/VenueMap"), {
   ssr: false,
@@ -166,6 +167,58 @@ type ActiveEventMeta = {
   venueName: string
   date: string
   mapImageSrc: string
+}
+
+type VenueMapRow = {
+  id: string
+  venue_id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  image_width: number | null
+  image_height: number | null
+  floor_label: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+type VenueZoneRow = {
+  id: string
+  venue_id: string
+  code: string
+  name: string
+  description: string | null
+  capacity: number | null
+  min_guests: number | null
+  max_guests: number | null
+  base_price: number | null
+  minimum_spend: number | null
+  status: string
+  is_active: boolean
+}
+
+type VenueMapZoneRow = {
+  id: string
+  venue_map_id: string
+  venue_zone_id: string
+  x_pct: number
+  y_pct: number
+  w_pct: number
+  h_pct: number
+  rotation_deg: number | null
+  z_index: number
+  is_active: boolean
+}
+
+type BookingMapZone = VenueZone & {
+  code?: string | null
+  mapZoneId?: string | null
+  xPct?: number | null
+  yPct?: number | null
+  wPct?: number | null
+  hPct?: number | null
+  rotationDeg?: number | null
+  zIndex?: number | null
 }
 
 const promotionTiles: PromotionTile[] = [
@@ -1393,6 +1446,60 @@ function AdminPanelIcon() {
   )
 }
 
+function normalizeVenueZoneForBooking(args: {
+  venueZone: VenueZoneRow
+  placement: VenueMapZoneRow
+}): BookingMapZone {
+  const { venueZone, placement } = args
+
+  const capacityMin =
+    typeof venueZone.min_guests === "number" ? venueZone.min_guests : 1
+
+  const capacityMax =
+    typeof venueZone.max_guests === "number"
+      ? venueZone.max_guests
+      : typeof venueZone.capacity === "number"
+        ? venueZone.capacity
+        : 10
+
+  const minSpend =
+    typeof venueZone.minimum_spend === "number"
+      ? Number(venueZone.minimum_spend)
+      : typeof venueZone.base_price === "number"
+        ? Number(venueZone.base_price)
+        : 0
+
+  return {
+    id: venueZone.id,
+    name: venueZone.name,
+    type: "table",
+    floor: "Venue",
+    section: venueZone.code || venueZone.name,
+    capacityMin,
+    capacityMax,
+    price:
+      typeof venueZone.base_price === "number"
+        ? Number(venueZone.base_price)
+        : minSpend,
+    minSpend,
+    description: venueZone.description || "Venue reservation area",
+    perks: [],
+    svgId: venueZone.code || venueZone.id,
+
+    code: venueZone.code || null,
+    mapZoneId: placement.id,
+    xPct: Number(placement.x_pct),
+    yPct: Number(placement.y_pct),
+    wPct: Number(placement.w_pct),
+    hPct: Number(placement.h_pct),
+    rotationDeg:
+      typeof placement.rotation_deg === "number"
+        ? Number(placement.rotation_deg)
+        : 0,
+    zIndex: Number(placement.z_index || 1),
+  }
+}
+
 export default function BookMapPage() {
   const router = useRouter()
   const sp = useSearchParams()
@@ -1414,23 +1521,13 @@ export default function BookMapPage() {
   const eventSlug = sp.get("event") || ""
   const isEventMode = !!eventSlug
 
+   const venueId = sp.get("venueId") || ""
+  const isVenueMode = !!venueId && !eventSlug
+  
+
   const [activeEvent, setActiveEvent] = useState<ActiveEventMeta | null>(null)
   const effectiveDate = isEventMode && activeEvent ? activeEvent.date : date
-  const mapImageSrc = activeEvent?.mapImageSrc || ""
-
-  // const filteredZones = useMemo(() => {
-  //   if (!rawPartySize || partySize === null) {
-  //     return venueZones
-  //   }
-
-  //   return venueZones.filter((zone) => {
-  //     if (rawPartySize === "10+") {
-  //       return zone.capacityMax >= 10
-  //     }
-  //     return partySize >= zone.capacityMin && partySize <= zone.capacityMax
-  //   })
-  // }, [partySize, rawPartySize])
-
+  
   const [selectedZoneId, setSelectedZoneId] = useState<string | undefined>()
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectionModalOpen, setSelectionModalOpen] = useState(false)
@@ -1457,6 +1554,21 @@ export default function BookMapPage() {
   const [dbZones, setDbZones] = useState<VenueZone[] | null>(null)
   const [zonesLoading, setZonesLoading] = useState(false)
   const [dbStatusByZoneId, setDbStatusByZoneId] = useState<Record<string, ZoneStatus>>({})
+
+  const [activeVenueMap, setActiveVenueMap] = useState<{
+    id: string
+    name: string
+    imageUrl: string
+  } | null>(null)
+
+  const [dbVenueZones, setDbVenueZones] = useState<BookingMapZone[] | null>(null)
+  const [venueZonesLoading, setVenueZonesLoading] = useState(false)
+
+  const mapImageSrc = isEventMode
+  ? activeEvent?.mapImageSrc || ""
+  : isVenueMode
+    ? activeVenueMap?.imageUrl || ""
+    : ""
 
   useEffect(() => {
     const fallbackDate = buildNextTwoWeeks("")[0]
@@ -1538,6 +1650,110 @@ export default function BookMapPage() {
   }
 }, [eventSlug])
 
+
+useEffect(() => {
+  let cancelled = false
+
+  async function loadVenueMapAndZones() {
+    if (!isVenueMode || !venueId) {
+      setActiveVenueMap(null)
+      setDbVenueZones(null)
+      return
+    }
+
+    setVenueZonesLoading(true)
+
+    try {
+      const { data: mapRow, error: mapError } = await supabase
+        .from("venue_maps")
+        .select("*")
+        .eq("venue_id", venueId)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (mapError) throw mapError
+
+      if (!mapRow) {
+        if (!cancelled) {
+          setActiveVenueMap(null)
+          setDbVenueZones([])
+        }
+        return
+      }
+
+      const venueMap = mapRow as VenueMapRow
+
+      const { data: placementRows, error: placementError } = await supabase
+        .from("venue_map_zones")
+        .select("*")
+        .eq("venue_map_id", venueMap.id)
+        .eq("is_active", true)
+        .order("z_index", { ascending: true })
+        .order("created_at", { ascending: true })
+
+      if (placementError) throw placementError
+
+      const placements = (placementRows as VenueMapZoneRow[]) || []
+      const venueZoneIds = placements.map((row) => row.venue_zone_id)
+
+      let zoneRows: VenueZoneRow[] = []
+
+      if (venueZoneIds.length > 0) {
+        const { data, error } = await supabase
+          .from("venue_zones")
+          .select("*")
+          .in("id", venueZoneIds)
+          .eq("is_active", true)
+
+        if (error) throw error
+        zoneRows = (data as VenueZoneRow[]) || []
+      }
+
+      const zoneMap = new Map(zoneRows.map((zone) => [zone.id, zone]))
+
+      const normalizedZones = placements
+        .map((placement) => {
+          const venueZone = zoneMap.get(placement.venue_zone_id)
+          if (!venueZone) return null
+
+          return normalizeVenueZoneForBooking({
+            venueZone,
+            placement,
+          })
+        })
+        .filter(Boolean) as VenueZone[]
+
+      if (!cancelled) {
+        setActiveVenueMap({
+          id: venueMap.id,
+          name: venueMap.name,
+          imageUrl: venueMap.image_url || "",
+        })
+        setDbVenueZones(normalizedZones)
+      }
+    } catch (error) {
+      console.error("Error loading venue map/zones:", error)
+      if (!cancelled) {
+        setActiveVenueMap(null)
+        setDbVenueZones(null)
+      }
+    } finally {
+      if (!cancelled) {
+        setVenueZonesLoading(false)
+      }
+    }
+  }
+
+  void loadVenueMapAndZones()
+
+  return () => {
+    cancelled = true
+  }
+}, [isVenueMode, venueId])
+
   useEffect(() => {
   let cancelled = false
 
@@ -1618,8 +1834,12 @@ export default function BookMapPage() {
     return dbZones ?? []
   }
 
+  if (isVenueMode) {
+    return dbVenueZones ?? []
+  }
+
   return venueZones
-}, [dbZones, isEventMode])
+}, [dbVenueZones, dbZones, isEventMode, isVenueMode])
 
   const filteredZones = useMemo(() => {
     if (!rawPartySize || partySize === null) {
@@ -1728,14 +1948,14 @@ export default function BookMapPage() {
     params.set("date", date)
   }
 
-  if (eventSlug) {
-    params.set("event", eventSlug)
-  }
+  if (venueId) {
+  params.set("venueId", venueId)
+}
 
   const href = params.toString() ? `/book/map?${params.toString()}` : "/book/map"
 
   window.sessionStorage.setItem("gf-last-map-href", href)
-}, [date, eventSlug])
+  }, [date, eventSlug, venueId])
 
   function buildFrozenSelectionFromCurrent(): FrozenSelection | null {
   if (!selectedZone || !selectedZonePurchasable) return null

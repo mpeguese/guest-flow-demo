@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 
-type IntentKey = "event" | "business" | "hybrid"
+type IntentKey = "event" | "hybrid"
 
 const OPTIONS: {
   key: IntentKey
@@ -33,26 +33,13 @@ const OPTIONS: {
     accentBottom: "rgba(255,255,255,0.12)",
   },
   {
-    key: "business",
-    eyebrow: "Business / Venue",
-    title: "Onboard your venue",
-    description:
-      "Good for operators managing staff, sections, maps, tables, and service flow.",
-    href: "/admin/signup?intent=business",
-    features: ["Staff access", "Maps + sections", "Nightly ops"],
-    imageUrl: "/images/admin-venue.jpg",
-    imageLabel: "Venue",
-    accentTop: "rgba(20,184,166,0.18)",
-    accentBottom: "rgba(255,255,255,0.12)",
-  },
-  {
     key: "hybrid",
     eyebrow: "Hybrid",
-    title: "Run both sides",
+    title: "Run full setup",
     description:
-      "Good for teams managing venue operations and hosted events together.",
+      "Good for teams managing events, maps, staff, and venue operations together.",
     href: "/admin/signup?intent=hybrid",
-    features: ["Events + venue", "Unified workflow", "Full control"],
+    features: ["Events", "Maps + zones", "Staff + ops"],
     imageUrl: "/images/admin-hybrid.jpg",
     imageLabel: "Hybrid",
     accentTop: "rgba(251,191,36,0.18)",
@@ -178,13 +165,6 @@ export default function AdminEntryPage() {
       color: "#ffffff",
       backdropFilter: "blur(10px)",
       WebkitBackdropFilter: "blur(10px)",
-    },
-    signinLink: {
-      fontSize: 14,
-      fontWeight: 800,
-      //color: "rgba(255,255,255,0.92)",
-      color: "#2563eb",
-      textDecoration: "none",
     },
     title: {
       marginTop: 26,
@@ -372,12 +352,6 @@ export default function AdminEntryPage() {
       fontSize: 14,
       color: "rgba(255,255,255,0.76)",
     },
-    footerLink: {
-      fontSize: 14,
-      fontWeight: 800,
-      color: "#ffffff",
-      textDecoration: "none",
-    },
   }
 
   return (
@@ -438,18 +412,21 @@ export default function AdminEntryPage() {
             <div style={styles.heroTop}>
               <div style={styles.topRow}>
                 <div style={styles.badge}>GuestFlow Admin</div>
-                <div 
-                    style={{marginTop: 12,
+                <div
+                  style={{
+                    marginTop: 12,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 8,
-                    flexWrap: "wrap",}}
-                    >
-                   Already have an account?
-                  <Link href="/admin/login" style={{fontWeight: 800, color: "#2563eb",}}>Sign in</Link>
+                    flexWrap: "wrap",
+                  }}
+                >
+                  Already have an account?
+                  <Link href="/admin/login" style={{ fontWeight: 800, color: "#2563eb" }}>
+                    Sign in
+                  </Link>
                 </div>
-                
               </div>
 
               <div style={styles.title}>
@@ -459,21 +436,17 @@ export default function AdminEntryPage() {
               </div>
 
               <div style={styles.copy}>
-                Run the door, tables, maps, staff access, and event flow.
+                Choose a fast event path or a full hybrid setup.
               </div>
 
               <div style={styles.pills}>
                 <div style={styles.pill}>Live operations</div>
                 <div style={styles.pill}>Tickets + tables</div>
-                <div style={styles.pill}>Maps + sections</div>
+                <div style={styles.pill}>Maps + zones</div>
               </div>
 
               <div style={styles.overlayWrap}>
-                <div
-                  ref={scrollerRef}
-                  style={styles.track}
-                  onScroll={handleScroll}
-                >
+                <div ref={scrollerRef} style={styles.track} onScroll={handleScroll}>
                   {OPTIONS.map((option) => (
                     <div key={option.key} style={styles.slide}>
                       <div
@@ -494,7 +467,6 @@ export default function AdminEntryPage() {
                       >
                         <div
                           style={{
-                            content: '""',
                             position: "absolute",
                             inset: 0,
                             background:
@@ -517,7 +489,6 @@ export default function AdminEntryPage() {
 
                           <div style={styles.contentPanel}>
                             <div style={styles.slideTitle}>{option.title}</div>
-
                             <div style={styles.slideCopy}>{option.description}</div>
 
                             <div style={styles.featureList}>
@@ -565,13 +536,7 @@ export default function AdminEntryPage() {
                 </div>
 
                 <div style={styles.footerRow}>
-                  <div style={styles.footerMuted}>
-                    Selected: {activeOption.eyebrow}
-                  </div>
-
-                  {/* <Link href={activeOption.href} style={styles.footerLink}>
-                    Continue setup
-                  </Link> */}
+                  <div style={styles.footerMuted}>Selected: {activeOption.eyebrow}</div>
                 </div>
               </div>
             </div>
