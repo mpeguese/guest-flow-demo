@@ -2,9 +2,10 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { createClient } from "@/app/lib/supabase/client"
 
-type StepStatus = "ready" | "next" | "upcoming"
+type StepStatus = "complete" | "ready" | "next" | "locked"
 
 type StepItem = {
   id: string
@@ -13,6 +14,13 @@ type StepItem = {
   status: StepStatus
   href?: string
   ctaLabel?: string
+  disabled?: boolean
+}
+
+type VenueLite = {
+  id: string
+  name: string
+  business_id: string | null
 }
 
 function ArrowRightIcon() {
@@ -31,6 +39,45 @@ function ArrowRightIcon() {
     >
       <path d="M5 12h14" />
       <path d="m13 5 7 7-7 7" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <path d="M7 11V8a5 5 0 0 1 10 0v3" />
     </svg>
   )
 }
@@ -120,17 +167,26 @@ function getStepIcon(id: string) {
 }
 
 function getStatusLabel(status: StepStatus) {
+  if (status === "complete") return "Complete"
   if (status === "ready") return "Ready"
   if (status === "next") return "Next"
-  return "Later"
+  return "Locked"
 }
 
 function getStatusStyles(status: StepStatus): CSSProperties {
+  if (status === "complete") {
+    return {
+      background: "rgba(15,118,110,0.10)",
+      color: "#0f766e",
+      border: "1px solid rgba(15,118,110,0.14)",
+    }
+  }
+
   if (status === "ready") {
     return {
-      background: "rgba(15,118,110,0.08)",
-      color: "#0f766e",
-      border: "1px solid rgba(15,118,110,0.10)",
+      background: "rgba(168,85,247,0.08)",
+      color: "#7c3aed",
+      border: "1px solid rgba(168,85,247,0.12)",
     }
   }
 
@@ -149,54 +205,111 @@ function getStatusStyles(status: StepStatus): CSSProperties {
   }
 }
 
-const STEPS: StepItem[] = [
-  {
-    id: "business",
-    title: "Add Business & Venue",
-    subtitle: "Add your business and venue(s) where events & bookings will run.",
-    status: "next",
-    href: "/admin/signup/hybrid/create/business",
-    ctaLabel: "Open",
-  },
-  {
-    id: "map",
-    title: "Upload Venue Map",
-    subtitle: "Upload the floor plan or venue layout for your venue.",
-    status: "next",
-    href: "/admin/signup/hybrid/create/map",
-    ctaLabel: "Open",
-  },
-  {
-    id: "zones",
-    title: "Map Venue Zones",
-    subtitle: "Place clickable booking areas on the map.",
-    status: "upcoming",
-  },
-  {
-    id: "event",
-    title: "Add First Event",
-    subtitle: "Create the first event at your venue.",
-    status: "ready",
-    href: "/admin/signup/event/create",
-    ctaLabel: "Open",
-  },
-  {
-    id: "staff",
-    title: "Invite Staff",
-    subtitle: "Add team access for door & reservation operations.",
-    status: "upcoming",
-  },
-  {
-    id: "payouts",
-    title: "Payouts",
-    subtitle: "Connect Stripe for payouts.",
-    status: "upcoming",
-  },
-]
+function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
+  if (!hasVenue) {
+    return [
+      {
+        id: "business",
+        title: "Business & Venue",
+        subtitle: "Create the business and attach the first venue.",
+        status: "next",
+        href: "/admin/signup/hybrid/create/business",
+        ctaLabel: "Open",
+      },
+      {
+        id: "map",
+        title: "Upload Venue Map",
+        subtitle: "Map setup unlocks after a venue exists.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "zones",
+        title: "Map Venue Zones",
+        subtitle: "Zones unlock after a map is uploaded.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "event",
+        title: "Add First Event",
+        subtitle: "Event setup can begin after the venue foundation exists.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "staff",
+        title: "Invite Staff",
+        subtitle: "Invite staff after the business foundation is created.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "payouts",
+        title: "Payouts",
+        subtitle: "Connect payouts after the business foundation is created.",
+        status: "locked",
+        disabled: true,
+      },
+    ]
+  }
+
+  return [
+    {
+      id: "business",
+      title: "Business & Venue",
+      subtitle: "Business and venue foundation are complete.",
+      status: "complete",
+      href: "/admin/signup/hybrid/create/business",
+      ctaLabel: "View",
+    },
+    {
+      id: "map",
+      title: "Upload Venue Map",
+      subtitle: "Next step: upload the venue map for this location.",
+      status: "next",
+      href: venueId
+        ? `/admin/signup/hybrid/create/map?venueId=${venueId}`
+        : "/admin/signup/hybrid/create/map",
+      ctaLabel: "Open",
+    },
+    {
+      id: "zones",
+      title: "Map Venue Zones",
+      subtitle: "Zones unlock after a venue map is uploaded.",
+      status: "locked",
+      disabled: true,
+    },
+    {
+      id: "event",
+      title: "Add First Event",
+      subtitle: "Event setup is available once your venue exists.",
+      status: "ready",
+      href: "/admin/signup/event/create",
+      ctaLabel: "Open",
+    },
+    {
+      id: "staff",
+      title: "Invite Staff",
+      subtitle: "Team access is now available.",
+      status: "ready",
+    },
+    {
+      id: "payouts",
+      title: "Payouts",
+      subtitle: "Stripe payout setup is now available.",
+      status: "ready",
+    },
+  ]
+}
 
 export default function SignupHybridCreatePage() {
+  const supabase = useMemo(() => createClient(), [])
   const [mounted, setMounted] = useState(false)
   const [isNarrow, setIsNarrow] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [latestVenue, setLatestVenue] = useState<VenueLite | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -208,12 +321,72 @@ export default function SignupHybridCreatePage() {
 
     if (typeof media.addEventListener === "function") {
       media.addEventListener("change", update)
-      return () => media.removeEventListener("change", update)
+    } else {
+      media.addListener(update)
     }
 
-    media.addListener(update)
-    return () => media.removeListener(update)
+    return () => {
+      if (typeof media.removeEventListener === "function") {
+        media.removeEventListener("change", update)
+      } else {
+        media.removeListener(update)
+      }
+    }
   }, [])
+
+  useEffect(() => {
+    async function loadProgression() {
+      try {
+        setErrorMessage("")
+        setIsLoading(true)
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          setErrorMessage(userError.message)
+          return
+        }
+
+        if (!user) {
+          setErrorMessage("You must be signed in to view Hybrid setup.")
+          return
+        }
+
+        const { data: venueRows, error: venueError } = await supabase
+          .from("venues")
+          .select("id, name, business_id")
+          .eq("created_by", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        if (venueError) {
+          setErrorMessage(venueError.message)
+          return
+        }
+
+        setLatestVenue(venueRows && venueRows.length > 0 ? venueRows[0] : null)
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Could not load Hybrid setup state."
+        )
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadProgression()
+  }, [supabase])
+
+  const steps = useMemo(
+    () => buildSteps(Boolean(latestVenue), latestVenue?.id),
+    [latestVenue]
+  )
+
+  const nextStep = steps.find((step) => step.status === "next")
+  const completedCount = steps.filter((step) => step.status === "complete").length
 
   if (!mounted) return null
 
@@ -232,8 +405,7 @@ export default function SignupHybridCreatePage() {
       minHeight: "100dvh",
       position: "relative",
       overflow: "hidden",
-      background:
-        "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
+      background: "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
       padding: isNarrow ? "14px 12px 22px" : "18px 14px 28px",
       boxSizing: "border-box",
     },
@@ -309,7 +481,18 @@ export default function SignupHybridCreatePage() {
       fontSize: 15,
       lineHeight: 1.65,
       color: "#475569",
-      maxWidth: 620,
+      maxWidth: 680,
+    },
+    messageError: {
+      marginTop: 16,
+      borderRadius: 16,
+      padding: "12px 14px",
+      background: "rgba(239, 68, 68, 0.08)",
+      border: "1px solid rgba(239, 68, 68, 0.18)",
+      color: "#b91c1c",
+      fontSize: 14,
+      fontWeight: 700,
+      lineHeight: 1.5,
     },
     heroMetaRow: {
       marginTop: 22,
@@ -368,6 +551,7 @@ export default function SignupHybridCreatePage() {
       fontSize: 14,
       lineHeight: 1.6,
       color: "rgba(255,255,255,0.80)",
+      maxWidth: 460,
     },
     eventCard: {
       ...glassCard,
@@ -421,6 +605,23 @@ export default function SignupHybridCreatePage() {
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
     },
+    primaryLinkDisabled: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      minHeight: 50,
+      padding: "0 18px",
+      borderRadius: 16,
+      border: "1px solid rgba(148,163,184,0.16)",
+      background: "rgba(255,255,255,0.35)",
+      color: "#94a3b8",
+      fontSize: 14,
+      fontWeight: 900,
+      cursor: "not-allowed",
+      pointerEvents: "none",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+    },
     checklistWrap: {
       marginTop: 18,
       display: "grid",
@@ -430,7 +631,7 @@ export default function SignupHybridCreatePage() {
     stepCard: {
       ...glassCard,
       padding: 18,
-      minHeight: 144,
+      minHeight: 152,
       display: "flex",
       flexDirection: "column",
       justifyContent: "space-between",
@@ -457,6 +658,7 @@ export default function SignupHybridCreatePage() {
     statusPill: {
       display: "inline-flex",
       alignItems: "center",
+      gap: 6,
       minHeight: 32,
       borderRadius: 999,
       padding: "0 10px",
@@ -503,7 +705,26 @@ export default function SignupHybridCreatePage() {
       backdropFilter: "blur(16px)",
       WebkitBackdropFilter: "blur(16px)",
     },
+    miniLinkDisabled: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      minHeight: 38,
+      padding: "0 12px",
+      borderRadius: 14,
+      border: "1px solid rgba(148,163,184,0.16)",
+      background: "rgba(255,255,255,0.35)",
+      color: "#94a3b8",
+      fontSize: 13,
+      fontWeight: 900,
+      cursor: "not-allowed",
+      pointerEvents: "none",
+      backdropFilter: "blur(16px)",
+      WebkitBackdropFilter: "blur(16px)",
+    },
   }
+
+  const hasVenue = Boolean(latestVenue)
 
   return (
     <div style={styles.page}>
@@ -553,65 +774,105 @@ export default function SignupHybridCreatePage() {
           <div style={styles.title}>Build the full operations path.</div>
 
           <div style={styles.summary}>
-            Use Hybrid for business, map, event, and zone setup.
+            Create the business foundation first, attach the venue, and unlock the next Hybrid steps.
           </div>
+
+          {errorMessage ? <div style={styles.messageError}>{errorMessage}</div> : null}
 
           <div style={styles.heroMetaRow}>
             <div style={styles.buildOrderCard}>
               <div style={styles.glow} />
               <div style={styles.buildLabel}>Recommended Build Order</div>
-              <div style={styles.buildTitle}>Business & Venue → Venue Map → Zones → Event → Staff</div>
-              <div style={styles.buildSub}>Start with the foundation. Keep the event flow.</div>
+              <div style={styles.buildTitle}>
+                Business & Venue → Venue Map → Zones → Event → Staff
+              </div>
+              <div style={styles.buildSub}>
+                {isLoading
+                  ? "Loading setup status..."
+                  : nextStep
+                  ? `Current next step: ${nextStep.title}. Completed ${completedCount} of ${steps.length}.`
+                  : `Setup progress loaded. Completed ${completedCount} of ${steps.length}.`}
+              </div>
             </div>
 
             <div style={styles.eventCard}>
               <div>
-                <div style={styles.eventLabel}>Available Now</div>
+                <div style={styles.eventLabel}>
+                  {hasVenue ? "Available Now" : "Locked Until Venue Exists"}
+                </div>
                 <div style={styles.eventTitle}>Add First Event</div>
-                <div style={styles.eventSub}>Continue with the existing event setup flow.</div>
+                <div style={styles.eventSub}>
+                  {hasVenue
+                    ? "Continue with the existing event setup flow whenever you are ready."
+                    : "Event setup unlocks after the first venue is created."}
+                </div>
               </div>
 
               <div style={styles.eventBtnRow}>
-                <Link href="/admin/signup/event/create" style={styles.primaryLink}>
-                  Open Event Setup
-                  <ArrowRightIcon />
-                </Link>
+                {hasVenue ? (
+                  <Link href="/admin/signup/event/create" style={styles.primaryLink}>
+                    Open Event Setup
+                    <ArrowRightIcon />
+                  </Link>
+                ) : (
+                  <div style={styles.primaryLinkDisabled}>
+                    Locked
+                    <LockIcon />
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </section>
 
         <section style={styles.checklistWrap}>
-          {STEPS.map((step) => (
-            <article key={step.id} style={styles.stepCard}>
-              <div>
-                <div style={styles.stepTop}>
-                  <div style={styles.stepIconWrap}>{getStepIcon(step.id)}</div>
+          {steps.map((step) => {
+            const isComplete = step.status === "complete"
+            const isLocked = step.status === "locked"
 
-                  <div
-                    style={{
-                      ...styles.statusPill,
-                      ...getStatusStyles(step.status),
-                    }}
-                  >
-                    {getStatusLabel(step.status)}
+            return (
+              <article key={step.id} style={styles.stepCard}>
+                <div>
+                  <div style={styles.stepTop}>
+                    <div style={styles.stepIconWrap}>{getStepIcon(step.id)}</div>
+
+                    <div
+                      style={{
+                        ...styles.statusPill,
+                        ...getStatusStyles(step.status),
+                      }}
+                    >
+                      {isComplete ? <CheckIcon /> : isLocked ? <LockIcon /> : null}
+                      {getStatusLabel(step.status)}
+                    </div>
                   </div>
+
+                  <div style={styles.stepTitle}>{step.title}</div>
+                  <div style={styles.stepSubtitle}>{step.subtitle}</div>
                 </div>
 
-                <div style={styles.stepTitle}>{step.title}</div>
-                <div style={styles.stepSubtitle}>{step.subtitle}</div>
-              </div>
-
-              {step.href && step.ctaLabel ? (
                 <div style={styles.stepFooter}>
-                  <Link href={step.href} style={styles.miniLink}>
-                    {step.ctaLabel}
-                    <ArrowRightIcon />
-                  </Link>
+                  {step.href && step.ctaLabel && !step.disabled ? (
+                    <Link href={step.href} style={styles.miniLink}>
+                      {step.ctaLabel}
+                      <ArrowRightIcon />
+                    </Link>
+                  ) : step.disabled ? (
+                    <div style={styles.miniLinkDisabled}>
+                      Locked
+                      <LockIcon />
+                    </div>
+                  ) : step.status === "ready" ? (
+                    <div style={styles.miniLinkDisabled}>Ready</div>
+                  ) : step.status === "complete" ? (
+                    <div style={styles.miniLinkDisabled}>Complete</div>
+                  ) : (
+                    <div style={styles.miniLinkDisabled}>Locked</div>
+                  )}
                 </div>
-              ) : null}
-            </article>
-          ))}
+              </article>
+            )
+          })}
         </section>
       </div>
     </div>

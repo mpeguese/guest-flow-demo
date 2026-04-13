@@ -22,23 +22,25 @@ const INTENT_CONTENT: Record<
     badge: "Hybrid",
     title: "Create your admin account",
     subtitle: "Start with full setup",
-    summary: "Good for teams running events, maps, staff, and venue operations together.",
+    summary:
+      "Good for teams running venue operations, events, maps, and staff.",
   },
 }
 
 function getIntent(value: string | string[] | undefined): IntentKey {
   const normalized = Array.isArray(value) ? value[0] : value
 
-  if (normalized === "hybrid") return "hybrid"
+  if ((normalized || "").trim().toLowerCase() === "hybrid") return "hybrid"
   return "event"
 }
 
-export default function AdminSignupPage({
+export default async function AdminSignupPage({
   searchParams,
 }: {
-  searchParams?: { intent?: string | string[] }
+  searchParams?: Promise<{ intent?: string | string[] }>
 }) {
-  const intent = getIntent(searchParams?.intent)
+  const resolvedSearchParams = searchParams ? await searchParams : undefined
+  const intent = getIntent(resolvedSearchParams?.intent)
   const content = INTENT_CONTENT[intent]
 
   return <AdminSignupClient content={content} />

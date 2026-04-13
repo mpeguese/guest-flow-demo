@@ -129,6 +129,9 @@ export default function HybridCreateMapClient() {
   const [deletingMapId, setDeletingMapId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
 
+  const [venueName, setVenueName] = useState("")
+  const [loadingVenue, setLoadingVenue] = useState(true)
+
   useEffect(() => {
     let active = true
 
@@ -168,6 +171,43 @@ export default function HybridCreateMapClient() {
       active = false
     }
   }, [venueId])
+
+  useEffect(() => {
+  let active = true
+
+  async function loadVenue() {
+    if (!venueId) {
+      setVenueName("")
+      setLoadingVenue(false)
+      return
+    }
+
+    setLoadingVenue(true)
+
+    const { data, error } = await supabase
+      .from("venues")
+      .select("name")
+      .eq("id", venueId)
+      .single()
+
+    if (!active) return
+
+    if (error) {
+      console.error("Unable to load venue:", error)
+      setVenueName("")
+    } else {
+      setVenueName(data?.name || "")
+    }
+
+    setLoadingVenue(false)
+  }
+
+  void loadVenue()
+
+  return () => {
+    active = false
+  }
+}, [venueId])
 
   useEffect(() => {
     return () => {
@@ -781,8 +821,16 @@ export default function HybridCreateMapClient() {
           </div>
 
           <div style={styles.venuePill}>
+          {!venueId
+            ? "Missing venueId in URL"
+            : loadingVenue
+            ? "Loading venue..."
+            : venueName || "Venue"}
+        </div>
+
+          {/* <div style={styles.venuePill}>
             {venueId ? `Venue ID: ${venueId}` : "Missing venueId in URL"}
-          </div>
+          </div> */}
 
           {errorMessage ? <div style={styles.errorText}>{errorMessage}</div> : null}
 

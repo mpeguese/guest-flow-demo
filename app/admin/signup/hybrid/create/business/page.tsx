@@ -3,28 +3,239 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState, type CSSProperties, type FormEvent } from "react"
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react"
+import { createClient } from "@/app/lib/supabase/client"
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function splitAddressParts(rawAddress: string) {
+  const parts = rawAddress
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (parts.length >= 3) {
+    return {
+      addressLine: parts[0],
+      city: parts[1],
+      state: parts[2].split(" ")[0] || "FL",
+    }
+  }
+
+  if (parts.length === 2) {
+    return {
+      addressLine: parts[0],
+      city: parts[1],
+      state: "FL",
+    }
+  }
+
+  return {
+    addressLine: rawAddress.trim(),
+    city: "Tampa",
+    state: "FL",
+  }
+}
+
+async function ensureUniqueSlug(
+  supabase: ReturnType<typeof createClient>,
+  table: "businesses" | "venues",
+  baseSlug: string
+) {
+  let attempt = 0
+
+  while (attempt < 10) {
+    const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
+
+    const { data, error } = await supabase
+      .from(table)
+      .select("id")
+      .eq("slug", candidate)
+      .limit(1)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
+
+    attempt += 1
+  }
+
+  return `${baseSlug}-${Date.now()}`
+}
 
 export default function HybridBusinessPage() {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
 
   const [businessName, setBusinessName] = useState("")
   const [venueName, setVenueName] = useState("")
-  const [businessType, setBusinessType] = useState("")
+  const [businessType, setBusinessType] = useState("other")
   const [contactEmail, setContactEmail] = useState("")
   const [phone, setPhone] = useState("")
   const [address, setAddress] = useState("")
+  const [description, setDescription] = useState("")
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    router.push("/admin/signup/hybrid/create/map")
+
+    if (isSubmitting) return
+
+    setErrorMessage("")
+
+    const trimmedBusinessName = businessName.trim()
+    const trimmedVenueName = venueName.trim()
+    const trimmedContactEmail = contactEmail.trim().toLowerCase()
+    const trimmedPhone = phone.trim()
+    const trimmedAddress = address.trim()
+    const trimmedDescription = description.trim()
+
+    if (!trimmedBusinessName) {
+      setErrorMessage("Please enter a business name.")
+      return
+    }
+
+    if (!trimmedVenueName) {
+      setErrorMessage("Please enter a venue name.")
+      return
+    }
+
+    if (!trimmedAddress) {
+      setErrorMessage("Please enter the venue address.")
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        setErrorMessage(userError.message)
+        return
+      }
+
+      if (!user) {
+        setErrorMessage("You must be signed in to create a business.")
+        return
+      }
+
+      const businessBaseSlug = slugify(trimmedBusinessName)
+      const venueBaseSlug = slugify(trimmedVenueName)
+
+      if (!businessBaseSlug) {
+        setErrorMessage("Please enter a valid business name.")
+        return
+      }
+
+      if (!venueBaseSlug) {
+        setErrorMessage("Please enter a valid venue name.")
+        return
+      }
+
+      const businessSlug = await ensureUniqueSlug(supabase, "businesses", businessBaseSlug)
+      const venueSlug = await ensureUniqueSlug(supabase, "venues", venueBaseSlug)
+
+      const addressParts = splitAddressParts(trimmedAddress)
+
+      const { data: businessRow, error: businessError } = await supabase
+        .from("businesses")
+        .insert({
+          name: trimmedBusinessName,
+          slug: businessSlug,
+          business_type: businessType,
+          contact_email: trimmedContactEmail || null,
+          phone: trimmedPhone || null,
+          description: trimmedDescription || null,
+          created_by: user.id,
+          active_status: true,
+        })
+        .select("id")
+        .single()
+
+      if (businessError) {
+        setErrorMessage(`Could not create business: ${businessError.message}`)
+        return
+      }
+
+      const { data: adminLinkErrorCheck, error: adminLinkError } = await supabase
+        .from("business_admins")
+        .insert({
+          business_id: businessRow.id,
+          user_id: user.id,
+          role: "owner",
+          is_primary: true,
+          invited_by: user.id,
+        })
+        .select("id")
+        .single()
+
+      if (adminLinkError) {
+        setErrorMessage(`Business created, but admin link failed: ${adminLinkError.message}`)
+        return
+      }
+
+      if (!adminLinkErrorCheck) {
+        setErrorMessage("Business created, but admin link was not returned.")
+        return
+      }
+
+      const { data: venueRow, error: venueError } = await supabase
+        .from("venues")
+        .insert({
+          name: trimmedVenueName,
+          slug: venueSlug,
+          address: addressParts.addressLine,
+          city: addressParts.city,
+          state: addressParts.state,
+          description: trimmedDescription || null,
+          active_status: true,
+          timezone: "America/New_York",
+          created_by: user.id,
+          business_id: businessRow.id,
+        })
+        .select("id")
+        .single()
+
+      if (venueError) {
+        setErrorMessage(`Business created, but venue failed: ${venueError.message}`)
+        return
+      }
+
+      router.push(
+        `/admin/signup/hybrid/create/map?venueId=${venueRow.id}&businessId=${businessRow.id}`
+      )
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while creating the business."
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const styles: Record<string, CSSProperties> = {
     page: {
       minHeight: "100vh",
-      background:
-        "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
+      background: "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
       padding: "22px 14px 28px",
       boxSizing: "border-box",
     },
@@ -130,6 +341,21 @@ export default function HybridBusinessPage() {
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
     },
+    select: {
+      width: "100%",
+      height: 56,
+      borderRadius: 18,
+      border: "1px solid rgba(255,255,255,0.20)",
+      background: "rgba(255,255,255,0.10)",
+      padding: "0 16px",
+      boxSizing: "border-box",
+      fontSize: 15,
+      fontWeight: 600,
+      color: "#0f172a",
+      outline: "none",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+    },
     textarea: {
       width: "100%",
       minHeight: 110,
@@ -142,10 +368,21 @@ export default function HybridBusinessPage() {
       fontWeight: 600,
       color: "#0f172a",
       outline: "none",
-      resize: "vertical" as const,
+      resize: "vertical",
       fontFamily: "inherit",
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
+    },
+    messageError: {
+      marginTop: 18,
+      borderRadius: 16,
+      padding: "12px 14px",
+      background: "rgba(239, 68, 68, 0.08)",
+      border: "1px solid rgba(239, 68, 68, 0.18)",
+      color: "#b91c1c",
+      fontSize: 14,
+      fontWeight: 700,
+      lineHeight: 1.5,
     },
     footer: {
       marginTop: 22,
@@ -169,7 +406,7 @@ export default function HybridBusinessPage() {
       fontWeight: 800,
     },
     primaryBtn: {
-      minWidth: 160,
+      minWidth: 180,
       height: 52,
       borderRadius: 16,
       border: "none",
@@ -177,7 +414,8 @@ export default function HybridBusinessPage() {
       color: "#ffffff",
       fontSize: 14,
       fontWeight: 900,
-      cursor: "pointer",
+      cursor: isSubmitting ? "not-allowed" : "pointer",
+      opacity: isSubmitting ? 0.7 : 1,
       boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
     },
   }
@@ -215,7 +453,7 @@ export default function HybridBusinessPage() {
             List your business
           </div>
           <div style={styles.summary}>
-            Add the business and venue details that the rest of the Hybrid setup will attach to.
+            Create the business first, then attach the first venue and continue into the map setup.
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -242,12 +480,20 @@ export default function HybridBusinessPage() {
 
               <div>
                 <label style={styles.label}>Business Type</label>
-                <input
-                  style={styles.input}
+                <select
+                  style={styles.select}
                   value={businessType}
                   onChange={(e) => setBusinessType(e.target.value)}
-                  placeholder="Nightclub, lounge, restaurant, festival..."
-                />
+                >
+                  <option value="other">Other</option>
+                  <option value="nightclub">Nightclub</option>
+                  <option value="bar">Bar</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="lounge">Lounge</option>
+                  <option value="festival">Festival</option>
+                  <option value="event_space">Event Space</option>
+                  <option value="hospitality_group">Hospitality Group</option>
+                </select>
               </div>
 
               <div>
@@ -272,23 +518,35 @@ export default function HybridBusinessPage() {
               </div>
 
               <div style={styles.full} className="hybrid-business-full">
-                <label style={styles.label}>Address</label>
-                <textarea
-                  style={styles.textarea}
+                <label style={styles.label}>Venue Address</label>
+                <input
+                  style={styles.input}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="123 Main St, Tampa, FL 33602"
                 />
               </div>
+
+              <div style={styles.full} className="hybrid-business-full">
+                <label style={styles.label}>Description</label>
+                <textarea
+                  style={styles.textarea}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional notes about the business or venue."
+                />
+              </div>
             </div>
+
+            {errorMessage ? <div style={styles.messageError}>{errorMessage}</div> : null}
 
             <div style={styles.footer}>
               <Link href="/admin/signup/hybrid/create" style={styles.ghostBtn}>
                 Back
               </Link>
 
-              <button type="submit" style={styles.primaryBtn}>
-                Continue to Map
+              <button type="submit" style={styles.primaryBtn} disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Continue to Map"}
               </button>
             </div>
           </form>
