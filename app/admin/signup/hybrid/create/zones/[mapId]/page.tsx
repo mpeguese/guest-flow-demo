@@ -930,7 +930,7 @@ export default function HybridZonesPage() {
     page: {
       minHeight: "100vh",
       background:
-        "radial-gradient(circle at top left, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 28%), radial-gradient(circle at bottom right, rgba(251,191,36,0.14) 0%, rgba(251,191,36,0) 24%), linear-gradient(180deg, #f8fcff 0%, #eef8ff 48%, #fff7ed 100%)",
+        "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
       padding: "22px 14px 28px",
       boxSizing: "border-box",
     },
@@ -1530,37 +1530,37 @@ export default function HybridZonesPage() {
   return (
     <div style={styles.page}>
       <style jsx>{`
-  .zones-modal-sheet::-webkit-scrollbar {
-    width: 10px;
-  }
-
-  .zones-modal-sheet::-webkit-scrollbar-track {
-    margin-top: 22px;
-    margin-bottom: 22px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.12);
-  }
-
-  .zones-modal-sheet::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: rgba(15,23,42,0.28);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  @media (max-width: 980px) {
-    .zones-layout {
-      grid-template-columns: 1fr !important;
+    .zones-modal-sheet::-webkit-scrollbar {
+        width: 10px;
     }
 
-    .zones-field-grid {
-      grid-template-columns: 1fr 1fr !important;
+    .zones-modal-sheet::-webkit-scrollbar-track {
+        margin-top: 22px;
+        margin-bottom: 22px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.12);
     }
 
-    .zones-field-grid-3 {
-      grid-template-columns: 1fr 1fr !important;
+    .zones-modal-sheet::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(15,23,42,0.28);
+        border: 2px solid transparent;
+        background-clip: padding-box;
     }
-  }
+
+    @media (max-width: 980px) {
+        .zones-layout {
+        grid-template-columns: 1fr !important;
+        }
+
+        .zones-field-grid {
+        grid-template-columns: 1fr 1fr !important;
+        }
+
+        .zones-field-grid-3 {
+        grid-template-columns: 1fr 1fr !important;
+        }
+    }
 
   @media (max-width: 700px) {
     .zones-modal-sheet {

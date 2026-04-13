@@ -24,7 +24,7 @@ const OPTIONS: {
     eyebrow: "Host Events",
     title: "Start with events",
     description:
-      "Good for one-time events, recurring series, and promoter-led nights.",
+      "Good for one-time events, recurring series, and promoter-led events.",
     href: "/admin/signup?intent=event",
     features: ["Ticketing", "Tables", "Guest flow"],
     imageUrl: "/images/admin-event.jpg",
@@ -39,7 +39,7 @@ const OPTIONS: {
     description:
       "Good for teams managing events, maps, staff, and venue operations together.",
     href: "/admin/signup?intent=hybrid",
-    features: ["Events", "Maps + zones", "Staff + ops"],
+    features: ["Events", "Maps + zones", "Staff + Ops"],
     imageUrl: "/images/admin-hybrid.jpg",
     imageLabel: "Hybrid",
     accentTop: "rgba(251,191,36,0.18)",
@@ -443,6 +443,7 @@ export default function AdminEntryPage() {
                 <div style={styles.pill}>Live operations</div>
                 <div style={styles.pill}>Tickets + tables</div>
                 <div style={styles.pill}>Maps + zones</div>
+                <div style={styles.pill}>Analytics</div>
               </div>
 
               <div style={styles.overlayWrap}>

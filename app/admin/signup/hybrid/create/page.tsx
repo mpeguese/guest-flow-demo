@@ -152,38 +152,38 @@ function getStatusStyles(status: StepStatus): CSSProperties {
 const STEPS: StepItem[] = [
   {
     id: "business",
-    title: "List Business",
-    subtitle: "Add your venue and business details.",
+    title: "Add Business & Venue",
+    subtitle: "Add your business and venue(s) where events & bookings will run.",
     status: "next",
     href: "/admin/signup/hybrid/create/business",
     ctaLabel: "Open",
   },
   {
     id: "map",
-    title: "Upload Map",
-    subtitle: "Add your floor plan or venue layout.",
+    title: "Upload Venue Map",
+    subtitle: "Upload the floor plan or venue layout for your venue.",
     status: "next",
     href: "/admin/signup/hybrid/create/map",
     ctaLabel: "Open",
   },
   {
     id: "zones",
-    title: "Map Zones",
+    title: "Map Venue Zones",
     subtitle: "Place clickable booking areas on the map.",
     status: "upcoming",
   },
   {
     id: "event",
     title: "Add First Event",
-    subtitle: "Create the first event for this setup.",
+    subtitle: "Create the first event at your venue.",
     status: "ready",
     href: "/admin/signup/event/create",
     ctaLabel: "Open",
   },
   {
     id: "staff",
-    title: "Staff",
-    subtitle: "Add team access for operations.",
+    title: "Invite Staff",
+    subtitle: "Add team access for door & reservation operations.",
     status: "upcoming",
   },
   {
@@ -233,7 +233,7 @@ export default function SignupHybridCreatePage() {
       position: "relative",
       overflow: "hidden",
       background:
-        "radial-gradient(circle at top left, rgba(56,189,248,0.22) 0%, rgba(56,189,248,0) 28%), radial-gradient(circle at bottom right, rgba(251,191,36,0.18) 0%, rgba(251,191,36,0) 24%), linear-gradient(180deg, #f8fcff 0%, #eef8ff 50%, #fff8ef 100%)",
+        "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
       padding: isNarrow ? "14px 12px 22px" : "18px 14px 28px",
       boxSizing: "border-box",
     },
@@ -560,7 +560,7 @@ export default function SignupHybridCreatePage() {
             <div style={styles.buildOrderCard}>
               <div style={styles.glow} />
               <div style={styles.buildLabel}>Recommended Build Order</div>
-              <div style={styles.buildTitle}>Business → Map → Zones → Event</div>
+              <div style={styles.buildTitle}>Business & Venue → Venue Map → Zones → Event → Staff</div>
               <div style={styles.buildSub}>Start with the foundation. Keep the event flow.</div>
             </div>
 

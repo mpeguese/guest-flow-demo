@@ -1,9 +1,185 @@
+// app/admin/login/page.tsx
 "use client"
 
 import Link from "next/link"
-import type { CSSProperties } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react"
+import { createClient } from "@/app/lib/supabase/client"
+
+type AppRole = "customer" | "venue_admin" | "promoter" | "staff" | "super_admin"
+
+function EyeIcon({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m3 3 18 18" />
+      <path d="M10.58 10.58A2 2 0 0 0 12 16a2 2 0 0 0 1.42-.58" />
+      <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-3.17 4.31" />
+      <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3.5 7 10 7a9.77 9.77 0 0 0 4.39-1.02" />
+    </svg>
+  )
+}
+
+function getRouteForRole(role: AppRole) {
+  switch (role) {
+    case "venue_admin":
+      return "/admin/signup/hybrid/create"
+    case "promoter":
+      return "/admin/signup/event/create"
+    case "staff":
+      return "/admin/dashboard"
+    case "super_admin":
+      return "/admin/dashboard"
+    case "customer":
+    default:
+      return "/"
+  }
+}
 
 export default function AdminLoginPage() {
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [keepSignedIn, setKeepSignedIn] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const params = new URLSearchParams(window.location.search)
+    const created = params.get("created")
+    const reset = params.get("reset")
+    const queryEmail = params.get("email") || ""
+
+    if (queryEmail) {
+      setEmail(queryEmail)
+    }
+
+    if (created === "1") {
+      setSuccessMessage("Account created. Sign in to continue.")
+    } else if (reset === "1") {
+      setSuccessMessage("Password updated. Sign in with your new password.")
+    }
+  }, [])
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    if (isSubmitting) return
+
+    setErrorMessage("")
+    setSuccessMessage("")
+
+    const trimmedEmail = email.trim().toLowerCase()
+
+    if (!trimmedEmail) {
+      setErrorMessage("Please enter your email address.")
+      return
+    }
+
+    if (!password) {
+      setErrorMessage("Please enter your password.")
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      })
+
+      if (error) {
+        setErrorMessage(error.message)
+        return
+      }
+
+      if (!data.user) {
+        setErrorMessage("Login succeeded, but no user was returned.")
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, is_active")
+        .eq("id", data.user.id)
+        .single()
+
+      if (profileError) {
+        setErrorMessage(`Signed in, but profile lookup failed: ${profileError.message}`)
+        return
+      }
+
+      if (!profile) {
+        setErrorMessage("Signed in, but no matching profile record was found.")
+        return
+      }
+
+      if (!profile.is_active) {
+        await supabase.auth.signOut()
+        setErrorMessage("This account is inactive. Please contact support.")
+        return
+      }
+
+      const route = getRouteForRole(profile.role as AppRole)
+      router.push(route)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while signing in."
+
+      setErrorMessage(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleForgotPassword = () => {
+    const trimmedEmail = email.trim()
+    const target = trimmedEmail
+      ? `/admin/login/reset?email=${encodeURIComponent(trimmedEmail)}`
+      : "/admin/login/reset"
+
+    router.push(target)
+  }
+
   const styles: Record<string, CSSProperties> = {
     page: {
       minHeight: "100vh",
@@ -231,6 +407,43 @@ export default function AdminLoginPage() {
       boxSizing: "border-box",
       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
     },
+    passwordWrap: {
+      position: "relative",
+      width: "100%",
+    },
+    passwordInput: {
+      width: "100%",
+      height: 58,
+      borderRadius: 18,
+      border: "1px solid rgba(255,255,255,0.16)",
+      background: "rgba(255,255,255,0.10)",
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      padding: "0 54px 0 16px",
+      fontSize: 15,
+      fontWeight: 600,
+      color: "#ffffff",
+      outline: "none",
+      boxSizing: "border-box",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+    },
+    eyeButton: {
+      position: "absolute",
+      top: "50%",
+      right: 12,
+      transform: "translateY(-50%)",
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      border: "1px solid rgba(255,255,255,0.16)",
+      background: "rgba(255,255,255,0.10)",
+      color: "#090909",
+      display: "grid",
+      placeItems: "center",
+      cursor: "pointer",
+      backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
+    },
     helperRow: {
       marginTop: 2,
       display: "flex",
@@ -255,6 +468,26 @@ export default function AdminLoginPage() {
       color: "#93c5fd",
       cursor: "pointer",
     },
+    messageError: {
+      borderRadius: 16,
+      padding: "12px 14px",
+      background: "rgba(239, 68, 68, 0.14)",
+      border: "1px solid rgba(255,255,255,0.10)",
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: 700,
+      lineHeight: 1.5,
+    },
+    messageSuccess: {
+      borderRadius: 16,
+      padding: "12px 14px",
+      background: "rgba(15, 118, 110, 0.18)",
+      border: "1px solid rgba(255,255,255,0.10)",
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: 700,
+      lineHeight: 1.5,
+    },
     primaryBtn: {
       marginTop: 4,
       width: "100%",
@@ -266,7 +499,8 @@ export default function AdminLoginPage() {
       fontSize: 15,
       fontWeight: 900,
       letterSpacing: "-0.2px",
-      cursor: "pointer",
+      cursor: isSubmitting ? "not-allowed" : "pointer",
+      opacity: isSubmitting ? 0.72 : 1,
       boxShadow: "0 12px 28px rgba(15, 23, 42, 0.14)",
     },
     secondaryRow: {
@@ -420,12 +654,15 @@ export default function AdminLoginPage() {
                       Access your GuestFlow Admin workspace.
                     </div>
 
-                    <div style={styles.form}>
+                    <form style={styles.form} onSubmit={handleSubmit}>
                       <div style={styles.fieldWrap}>
                         <label style={styles.fieldLabel}>Email</label>
                         <input
                           type="email"
                           placeholder="manager@guestflow.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          autoComplete="email"
                           style={{
                             ...styles.fieldInput,
                             ...(isMobile
@@ -440,20 +677,41 @@ export default function AdminLoginPage() {
 
                       <div style={styles.fieldWrap}>
                         <label style={styles.fieldLabel}>Password</label>
-                        <input
-                          type="password"
-                          placeholder="Enter your password"
-                          style={{
-                            ...styles.fieldInput,
-                            ...(isMobile
-                              ? {
-                                  height: 54,
-                                  borderRadius: 16,
-                                }
-                              : null),
-                          }}
-                        />
+                        <div style={styles.passwordWrap}>
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                            style={{
+                              ...styles.passwordInput,
+                              ...(isMobile
+                                ? {
+                                    height: 54,
+                                    borderRadius: 16,
+                                  }
+                                : null),
+                            }}
+                          />
+                          <button
+                            type="button"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            style={styles.eyeButton}
+                          >
+                            <EyeIcon open={showPassword} />
+                          </button>
+                        </div>
                       </div>
+
+                      {errorMessage ? (
+                        <div style={styles.messageError}>{errorMessage}</div>
+                      ) : null}
+
+                      {successMessage ? (
+                        <div style={styles.messageSuccess}>{successMessage}</div>
+                      ) : null}
 
                       <div
                         style={{
@@ -467,14 +725,25 @@ export default function AdminLoginPage() {
                         }}
                       >
                         <label style={styles.keepSignedIn}>
-                          <input type="checkbox" defaultChecked />
+                          <input
+                            type="checkbox"
+                            checked={keepSignedIn}
+                            onChange={(e) => setKeepSignedIn(e.target.checked)}
+                          />
                           Keep me signed in
                         </label>
 
-                        <button style={styles.forgotBtn}>Forgot password?</button>
+                        <button
+                          type="button"
+                          style={styles.forgotBtn}
+                          onClick={handleForgotPassword}
+                        >
+                          Forgot password?
+                        </button>
                       </div>
 
                       <button
+                        type="submit"
                         style={{
                           ...styles.primaryBtn,
                           ...(isMobile
@@ -484,10 +753,11 @@ export default function AdminLoginPage() {
                               }
                             : null),
                         }}
+                        disabled={isSubmitting}
                       >
-                        Sign In
+                        {isSubmitting ? "Signing In..." : "Sign In"}
                       </button>
-                    </div>
+                    </form>
 
                     <div
                       style={{

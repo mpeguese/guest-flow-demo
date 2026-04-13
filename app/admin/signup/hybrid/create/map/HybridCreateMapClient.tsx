@@ -345,7 +345,7 @@ export default function HybridCreateMapClient() {
     page: {
       minHeight: "100vh",
       background:
-        "radial-gradient(circle at top left, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 28%), radial-gradient(circle at bottom right, rgba(251,191,36,0.14) 0%, rgba(251,191,36,0) 24%), linear-gradient(180deg, #f8fcff 0%, #eef8ff 48%, #fff7ed 100%)",
+        "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
       padding: "22px 14px 28px",
       boxSizing: "border-box",
     },
