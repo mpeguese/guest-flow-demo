@@ -420,6 +420,7 @@ export default function HybridCreateMapClient() {
       fontWeight: 800,
       color: "#0f766e",
       textDecoration: "none",
+      marginRight: 30
     },
     panel: {
       borderRadius: 30,
@@ -807,7 +808,7 @@ export default function HybridCreateMapClient() {
           <div style={styles.gfMark}>GF</div>
 
           <Link href="/admin/signup/hybrid/create" style={styles.backLink}>
-            Back to Hybrid
+            Back to SetUp
           </Link>
         </div>
 
@@ -892,7 +893,7 @@ export default function HybridCreateMapClient() {
                       <div style={styles.uploadPlaceholder}>
                         <div style={styles.placeholderInner}>
                           <ImageIcon />
-                          <div style={styles.placeholderText}>Tap to upload map image</div>
+                          <div style={styles.placeholderText}>Tap to upload a map</div>
                         </div>
                       </div>
                     )}

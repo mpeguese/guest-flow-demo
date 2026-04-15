@@ -965,6 +965,7 @@ export default function HybridZonesPage() {
       fontWeight: 800,
       color: "#0f766e",
       textDecoration: "none",
+      marginRight: 30
     },
     heroPanel: {
       borderRadius: 30,
@@ -1609,7 +1610,7 @@ export default function HybridZonesPage() {
             href={`/admin/signup/hybrid/create/map?venueId=${venueIdFromQuery || mapRecord?.venue_id || ""}`}
             style={styles.backLink}
           >
-            Back to Maps
+            Back to Set Up
           </Link>
         </div>
 

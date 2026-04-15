@@ -23,6 +23,10 @@ type VenueLite = {
   business_id: string | null
 }
 
+type MapLite = {
+  id: string
+}
+
 function ArrowRightIcon() {
   return (
     <svg
@@ -205,7 +209,24 @@ function getStatusStyles(status: StepStatus): CSSProperties {
   }
 }
 
-function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
+function buildSteps(
+  hasVenue: boolean,
+  hasMap: boolean,
+  hasZones: boolean,
+  venueId?: string,
+  latestMapId?: string | null
+): StepItem[] {
+  const canOpenStaff = hasVenue && hasMap && hasZones
+  const canOpenPayouts = hasVenue && hasMap && hasZones
+
+  const staffHref = venueId
+    ? `/admin/staff?venueId=${venueId}`
+    : "/admin/staff"
+
+  const payoutsHref = venueId
+    ? `/admin/signup/hybrid/create/payouts?venueId=${venueId}`
+    : "/admin/signup/hybrid/create/payouts"
+
   if (!hasVenue) {
     return [
       {
@@ -226,7 +247,7 @@ function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
       {
         id: "zones",
         title: "Map Venue Zones",
-        subtitle: "Zones unlock after a map is uploaded.",
+        subtitle: "Zones unlock after a venue map is uploaded.",
         status: "locked",
         disabled: true,
       },
@@ -240,14 +261,123 @@ function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
       {
         id: "staff",
         title: "Invite Staff",
-        subtitle: "Invite staff after the business foundation is created.",
+        subtitle: "Invite staff after the venue map and zones are complete.",
         status: "locked",
         disabled: true,
       },
       {
         id: "payouts",
         title: "Payouts",
-        subtitle: "Connect payouts after the business foundation is created.",
+        subtitle: "Connect payouts after the venue map and zones are complete.",
+        status: "locked",
+        disabled: true,
+      },
+    ]
+  }
+
+  if (hasVenue && !hasMap) {
+    return [
+      {
+        id: "business",
+        title: "Business & Venue",
+        subtitle: "Business and venue foundation are complete.",
+        status: "complete",
+        href: "/admin/signup/hybrid/create/business",
+        ctaLabel: "View",
+      },
+      {
+        id: "map",
+        title: "Upload Venue Map",
+        subtitle: "Next step: upload the venue map for this location.",
+        status: "next",
+        href: venueId
+          ? `/admin/signup/hybrid/create/map?venueId=${venueId}`
+          : "/admin/signup/hybrid/create/map",
+        ctaLabel: "Open",
+      },
+      {
+        id: "zones",
+        title: "Map Venue Zones",
+        subtitle: "Zones unlock after a venue map is uploaded.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "event",
+        title: "Add An Event",
+        subtitle: "Event setup is available once your venue exists.",
+        status: "ready",
+        href: "/admin/signup/event/create",
+        ctaLabel: "Open",
+      },
+      {
+        id: "staff",
+        title: "Invite Staff",
+        subtitle: "Invite staff after venue map and zones are complete.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "payouts",
+        title: "Payouts",
+        subtitle: "Stripe payout setup unlocks after venue map and zones are complete.",
+        status: "locked",
+        disabled: true,
+      },
+    ]
+  }
+
+  if (hasVenue && hasMap && !hasZones) {
+    return [
+      {
+        id: "business",
+        title: "Business & Venue",
+        subtitle: "Business and venue foundation are complete.",
+        status: "complete",
+        href: "/admin/signup/hybrid/create/business",
+        ctaLabel: "View",
+      },
+      {
+        id: "map",
+        title: "Upload Venue Map",
+        subtitle: "Venue map has already been added.",
+        status: "complete",
+        href: venueId
+          ? `/admin/signup/hybrid/create/map?venueId=${venueId}`
+          : "/admin/signup/hybrid/create/map",
+        ctaLabel: "View",
+      },
+      {
+        id: "zones",
+        title: "Map Venue Zones",
+        subtitle: "Now place clickable booking areas on the uploaded map.",
+        status: "next",
+        href:
+          latestMapId && venueId
+            ? `/admin/signup/hybrid/create/zones/${latestMapId}?venueId=${venueId}`
+            : undefined,
+        ctaLabel: "Open",
+        disabled: !latestMapId,
+      },
+      {
+        id: "event",
+        title: "Add An Event",
+        subtitle: "Event setup is available once your venue exists.",
+        status: "ready",
+        href: "/admin/signup/event/create",
+        ctaLabel: "Open",
+      },
+      {
+        id: "staff",
+        title: "Invite Staff",
+        subtitle: "Invite staff after venue zones are complete.",
+        status: "locked",
+        disabled: true,
+      },
+      {
+        id: "payouts",
+        title: "Payouts",
+        subtitle: "Stripe payout setup unlocks after venue zones are complete.",
         status: "locked",
         disabled: true,
       },
@@ -266,23 +396,28 @@ function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
     {
       id: "map",
       title: "Upload Venue Map",
-      subtitle: "Next step: upload the venue map for this location.",
-      status: "next",
+      subtitle: "Venue map has already been added.",
+      status: "complete",
       href: venueId
         ? `/admin/signup/hybrid/create/map?venueId=${venueId}`
         : "/admin/signup/hybrid/create/map",
-      ctaLabel: "Open",
+      ctaLabel: "View",
     },
     {
       id: "zones",
       title: "Map Venue Zones",
-      subtitle: "Zones unlock after a venue map is uploaded.",
-      status: "locked",
-      disabled: true,
+      subtitle: "Venue zones have already been added.",
+      status: "complete",
+      href:
+        latestMapId && venueId
+          ? `/admin/signup/hybrid/create/zones/${latestMapId}?venueId=${venueId}`
+          : undefined,
+      ctaLabel: latestMapId && venueId ? "View" : undefined,
+      disabled: !latestMapId,
     },
     {
       id: "event",
-      title: "Add First Event",
+      title: "Add An Event",
       subtitle: "Event setup is available once your venue exists.",
       status: "ready",
       href: "/admin/signup/event/create",
@@ -293,12 +428,16 @@ function buildSteps(hasVenue: boolean, venueId?: string): StepItem[] {
       title: "Invite Staff",
       subtitle: "Team access is now available.",
       status: "ready",
+      href: staffHref,
+      ctaLabel: "Open",
     },
     {
       id: "payouts",
       title: "Payouts",
       subtitle: "Stripe payout setup is now available.",
       status: "ready",
+      href: payoutsHref,
+      ctaLabel: "Open",
     },
   ]
 }
@@ -310,6 +449,9 @@ export default function SignupHybridCreatePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState("")
   const [latestVenue, setLatestVenue] = useState<VenueLite | null>(null)
+  const [hasMap, setHasMap] = useState(false)
+  const [latestMapId, setLatestMapId] = useState<string | null>(null)
+  const [hasZones, setHasZones] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -335,15 +477,23 @@ export default function SignupHybridCreatePage() {
   }, [])
 
   useEffect(() => {
+    let active = true
+
     async function loadProgression() {
       try {
         setErrorMessage("")
         setIsLoading(true)
+        setLatestVenue(null)
+        setHasMap(false)
+        setLatestMapId(null)
+        setHasZones(false)
 
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser()
+
+        if (!active) return
 
         if (userError) {
           setErrorMessage(userError.message)
@@ -362,27 +512,91 @@ export default function SignupHybridCreatePage() {
           .order("created_at", { ascending: false })
           .limit(1)
 
+        if (!active) return
+
         if (venueError) {
           setErrorMessage(venueError.message)
           return
         }
 
-        setLatestVenue(venueRows && venueRows.length > 0 ? venueRows[0] : null)
+        const venue = venueRows && venueRows.length > 0 ? venueRows[0] : null
+        setLatestVenue(venue)
+
+        if (!venue) {
+          return
+        }
+
+        const { data: mapRows, error: mapError } = await supabase
+          .from("venue_maps")
+          .select("id")
+          .eq("venue_id", venue.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+
+        if (!active) return
+
+        if (mapError) {
+          setErrorMessage(mapError.message)
+          return
+        }
+
+        const activeMaps = (mapRows as MapLite[] | null) || []
+        const latestMap = activeMaps.length > 0 ? activeMaps[0] : null
+
+        setHasMap(activeMaps.length > 0)
+        setLatestMapId(latestMap?.id ?? null)
+
+        if (activeMaps.length === 0) {
+          return
+        }
+
+        const mapIds = activeMaps.map((map) => map.id)
+
+        const { data: zoneRows, error: zoneError } = await supabase
+          .from("venue_map_zones")
+          .select("id, venue_map_id")
+          .in("venue_map_id", mapIds)
+          .eq("is_active", true)
+          .limit(1)
+
+        if (!active) return
+
+        if (zoneError) {
+          setErrorMessage(zoneError.message)
+          return
+        }
+
+        setHasZones(Boolean(zoneRows && zoneRows.length > 0))
       } catch (error) {
+        if (!active) return
+
         setErrorMessage(
           error instanceof Error ? error.message : "Could not load Hybrid setup state."
         )
       } finally {
-        setIsLoading(false)
+        if (active) {
+          setIsLoading(false)
+        }
       }
     }
 
-    loadProgression()
+    void loadProgression()
+
+    return () => {
+      active = false
+    }
   }, [supabase])
 
   const steps = useMemo(
-    () => buildSteps(Boolean(latestVenue), latestVenue?.id),
-    [latestVenue]
+    () =>
+      buildSteps(
+        Boolean(latestVenue),
+        hasMap,
+        hasZones,
+        latestVenue?.id,
+        latestMapId
+      ),
+    [latestVenue, hasMap, hasZones, latestMapId]
   )
 
   const nextStep = steps.find((step) => step.status === "next")
@@ -764,17 +978,17 @@ export default function SignupHybridCreatePage() {
           <div style={styles.gfMark}>GF</div>
 
           <Link href="/admin/signup?intent=hybrid" style={styles.backLink}>
-            Back to hybrid signup
+            Back to signup
           </Link>
         </div>
 
         <section style={styles.heroPanel}>
           <div style={styles.badge}>Hybrid Setup</div>
 
-          <div style={styles.title}>Build the full operations path.</div>
+          <div style={styles.title}>Build your venue workflow.</div>
 
           <div style={styles.summary}>
-            Create the business foundation first, attach the venue, and unlock the next Hybrid steps.
+            Create the business and venue first, map the venue, and unlock the next steps.
           </div>
 
           {errorMessage ? <div style={styles.messageError}>{errorMessage}</div> : null}
@@ -800,7 +1014,7 @@ export default function SignupHybridCreatePage() {
                 <div style={styles.eventLabel}>
                   {hasVenue ? "Available Now" : "Locked Until Venue Exists"}
                 </div>
-                <div style={styles.eventTitle}>Add First Event</div>
+                <div style={styles.eventTitle}>Add An Event</div>
                 <div style={styles.eventSub}>
                   {hasVenue
                     ? "Continue with the existing event setup flow whenever you are ready."

@@ -1,23 +1,25 @@
 // middleware.ts
+// middleware.ts
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
-const PUBLIC_ADMIN_PATHS = [
-  "/admin",
-  "/admin/login",
-  "/admin/signup",
-]
+const PUBLIC_ADMIN_PATHS = ["/admin", "/admin/login", "/admin/signup"]
 
 function isPublicAdminPath(pathname: string) {
-  return PUBLIC_ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}?`))
+  return PUBLIC_ADMIN_PATHS.some((path) => pathname === path)
 }
 
 function isProtectedAdminPath(pathname: string) {
-  if (!pathname.startsWith("/admin")) return false
-  return !isPublicAdminPath(pathname)
+  return pathname.startsWith("/admin") && !isPublicAdminPath(pathname)
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  if (!pathname.startsWith("/admin")) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -40,8 +42,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  const { pathname } = request.nextUrl
 
   if (isProtectedAdminPath(pathname) && !user) {
     const loginUrl = new URL("/admin/login", request.url)
