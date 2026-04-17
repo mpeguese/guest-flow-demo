@@ -588,23 +588,23 @@ export default function InviteStaffClient({
       padding: isMobile ? 16 : 18,
     } as React.CSSProperties,
 
-    listWrap: {
-      display: "grid",
-      gap: 10,
-    } as React.CSSProperties,
+    // listWrap: {
+    //   display: "grid",
+    //   gap: 10,
+    // } as React.CSSProperties,
 
-    rowCard: {
-      display: "grid",
-      gridTemplateColumns: listRowGrid,
-      gap: 10,
-      alignItems: "center",
-      padding: screenWidth < 860 ? 14 : 12,
-      borderRadius: 22,
-      background: "rgba(255,255,255,0.22)",
-      border: "1px solid rgba(255,255,255,0.34)",
-      backdropFilter: "blur(16px)",
-      WebkitBackdropFilter: "blur(16px)",
-    } as React.CSSProperties,
+    // rowCard: {
+    //   display: "grid",
+    //   gridTemplateColumns: listRowGrid,
+    //   gap: 10,
+    //   alignItems: "center",
+    //   padding: screenWidth < 860 ? 14 : 12,
+    //   borderRadius: 22,
+    //   background: "rgba(255,255,255,0.22)",
+    //   border: "1px solid rgba(255,255,255,0.34)",
+    //   backdropFilter: "blur(16px)",
+    //   WebkitBackdropFilter: "blur(16px)",
+    // } as React.CSSProperties,
 
     rowBlock: {
       display: "grid",
@@ -612,31 +612,31 @@ export default function InviteStaffClient({
       minWidth: 0,
     } as React.CSSProperties,
 
-    rowLabel: {
-      fontSize: 11,
-      fontWeight: 800,
-      textTransform: "uppercase" as const,
-      letterSpacing: "0.1em",
-      color: "rgba(16,36,58,0.54)",
-    },
+    // rowLabel: {
+    //   fontSize: 11,
+    //   fontWeight: 800,
+    //   textTransform: "uppercase" as const,
+    //   letterSpacing: "0.1em",
+    //   color: "rgba(16,36,58,0.54)",
+    // },
 
-    rowValue: {
-      fontSize: 14,
-      fontWeight: 800,
-      color: "#0d2438",
-      whiteSpace: "nowrap" as const,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-    },
+    // rowValue: {
+    //   fontSize: 14,
+    //   fontWeight: 800,
+    //   color: "#0d2438",
+    //   whiteSpace: "nowrap" as const,
+    //   overflow: "hidden",
+    //   textOverflow: "ellipsis",
+    // },
 
-    subValue: {
-      fontSize: 12,
-      color: "rgba(16,36,58,0.64)",
-      whiteSpace: "nowrap" as const,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      fontWeight: 600,
-    },
+    // subValue: {
+    //   fontSize: 12,
+    //   color: "rgba(16,36,58,0.64)",
+    //   whiteSpace: "nowrap" as const,
+    //   overflow: "hidden",
+    //   textOverflow: "ellipsis",
+    //   fontWeight: 600,
+    // },
 
     pill: {
       display: "inline-flex",
@@ -653,27 +653,27 @@ export default function InviteStaffClient({
       WebkitBackdropFilter: "blur(14px)",
     } as React.CSSProperties,
 
-    actionRow: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap" as const,
-      justifyContent: screenWidth < 860 ? "flex-start" : "flex-end",
-    } as React.CSSProperties,
+    // actionRow: {
+    //   display: "flex",
+    //   alignItems: "center",
+    //   gap: 8,
+    //   flexWrap: "wrap" as const,
+    //   justifyContent: screenWidth < 860 ? "flex-start" : "flex-end",
+    // } as React.CSSProperties,
 
-    ghostButton: {
-      minHeight: 38,
-      borderRadius: 14,
-      padding: "0 12px",
-      fontSize: 12,
-      fontWeight: 800,
-      color: "#0f2940",
-      background: "rgba(255,255,255,0.26)",
-      border: "1px solid rgba(255,255,255,0.38)",
-      cursor: "pointer",
-      backdropFilter: "blur(14px)",
-      WebkitBackdropFilter: "blur(14px)",
-    } as React.CSSProperties,
+    // ghostButton: {
+    //   minHeight: 38,
+    //   borderRadius: 14,
+    //   padding: "0 12px",
+    //   fontSize: 12,
+    //   fontWeight: 800,
+    //   color: "#0f2940",
+    //   background: "rgba(255,255,255,0.26)",
+    //   border: "1px solid rgba(255,255,255,0.38)",
+    //   cursor: "pointer",
+    //   backdropFilter: "blur(14px)",
+    //   WebkitBackdropFilter: "blur(14px)",
+    // } as React.CSSProperties,
 
     emptyState: {
       borderRadius: 22,
@@ -687,6 +687,96 @@ export default function InviteStaffClient({
       backdropFilter: "blur(16px)",
       WebkitBackdropFilter: "blur(16px)",
     } as React.CSSProperties,
+
+    listWrap: {
+  display: "grid",
+  gap: 10,
+} as React.CSSProperties,
+
+rowCard: {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: 12,
+  borderRadius: 22,
+  background: "rgba(255,255,255,0.22)",
+  border: "1px solid rgba(255,255,255,0.34)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  overflow: "hidden",
+} as React.CSSProperties,
+
+nameBlock: {
+  minWidth: 0,
+  flex: "1.7 1 0",
+  display: "grid",
+  gap: 4,
+} as React.CSSProperties,
+
+metaBlock: {
+  minWidth: 92,
+  flex: "0 1 110px",
+  display: "grid",
+  gap: 4,
+} as React.CSSProperties,
+
+dateBlock: {
+  minWidth: 108,
+  flex: "0 1 120px",
+  display: "grid",
+  gap: 4,
+} as React.CSSProperties,
+
+actionRow: {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  flex: "0 0 auto",
+  marginLeft: "auto",
+} as React.CSSProperties,
+
+rowLabel: {
+  fontSize: 10,
+  fontWeight: 800,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.08em",
+  color: "rgba(16,36,58,0.54)",
+  whiteSpace: "nowrap" as const,
+},
+
+rowValue: {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#0d2438",
+  whiteSpace: "nowrap" as const,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+},
+
+subValue: {
+  fontSize: 12,
+  color: "rgba(16,36,58,0.64)",
+  whiteSpace: "nowrap" as const,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  fontWeight: 600,
+},
+
+ghostButton: {
+  minHeight: 36,
+  borderRadius: 14,
+  padding: "0 12px",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#0f2940",
+  background: "rgba(255,255,255,0.26)",
+  border: "1px solid rgba(255,255,255,0.38)",
+  cursor: "pointer",
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+  whiteSpace: "nowrap" as const,
+  flexShrink: 0,
+} as React.CSSProperties,
   }
 
   return (
@@ -907,7 +997,7 @@ export default function InviteStaffClient({
                         disabled={statusUpdatingId === member.id}
                         style={styles.ghostButton}
                       >
-                        {statusUpdatingId === member.id ? "Saving..." : "Set Inactive"}
+                        {statusUpdatingId === member.id ? "Saving..." : "Disable"}
                       </button>
                     )}
                   </div>

@@ -2370,7 +2370,7 @@ export default function AdminSignupEventCreatePage() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr" : "120px 112px minmax(0, 1fr)",
+                    gridTemplateColumns: isMobile ? "1fr" : "120px 120px minmax(0, 1fr)",
                     alignItems: "center",
                     gap: 10,
                   }}
@@ -2433,7 +2433,7 @@ export default function AdminSignupEventCreatePage() {
                   style={{
                     marginTop: 12,
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr" : "120px minmax(0, 1fr) 160px",
+                    gridTemplateColumns: isMobile ? "1fr" : "120px minmax(0, 1fr) 120px",
                     alignItems: "center",
                     gap: 10,
                   }}
