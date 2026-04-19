@@ -59,7 +59,7 @@ type VenueZoneRow = {
   updated_at: string
 }
 
-type VenueMapZoneRow = {
+type VenueZoneCoordinateRow = {
   id: string
   venue_map_id: string
   venue_zone_id: string
@@ -340,7 +340,7 @@ export default function HybridZonesPage() {
       setMapRecord(mapRow)
 
       const { data: placementRows, error: placementError } = await supabase
-        .from("venue_map_zones")
+        .from("venue_zones_coordinates")
         .select("*")
         .eq("venue_map_id", mapId)
         .eq("is_active", true)
@@ -356,7 +356,7 @@ export default function HybridZonesPage() {
         return
       }
 
-      const placements = (placementRows as VenueMapZoneRow[]) || []
+      const placements = (placementRows as VenueZoneCoordinateRow[]) || []
       const venueZoneIds = placements.map((placement) => placement.venue_zone_id)
 
       let venueZones: VenueZoneRow[] = []
@@ -551,7 +551,7 @@ export default function HybridZonesPage() {
       const venueZone = venueZoneData as VenueZoneRow
 
       const { data: placementData, error: placementError } = await supabase
-        .from("venue_map_zones")
+        .from("venue_zones_coordinates")
         .insert({
           venue_map_id: mapId,
           venue_zone_id: venueZone.id,
@@ -574,7 +574,7 @@ export default function HybridZonesPage() {
         throw placementError
       }
 
-      const placement = placementData as VenueMapZoneRow
+      const placement = placementData as VenueZoneCoordinateRow
 
       const nextZone: ZoneRecord = {
         id: placement.id,
@@ -606,7 +606,7 @@ export default function HybridZonesPage() {
 
   const savePlacementToDb = async (zone: ZoneRecord) => {
     const { error } = await supabase
-      .from("venue_map_zones")
+      .from("venue_zones_coordinates")
       .update({
         x_pct: Number(zone.x.toFixed(2)),
         y_pct: Number(zone.y.toFixed(2)),
@@ -767,7 +767,7 @@ export default function HybridZonesPage() {
 
     try {
       const { error: placementError } = await supabase
-        .from("venue_map_zones")
+        .from("venue_zones_coordinates")
         .update({ is_active: false })
         .eq("id", zone.id)
 
@@ -777,7 +777,10 @@ export default function HybridZonesPage() {
 
       const { error: venueZoneError } = await supabase
         .from("venue_zones")
-        .update({ is_active: false })
+        .update({ 
+            is_active: false,
+            status: "inactive",
+        })
         .eq("id", zone.venueZoneId)
 
       if (venueZoneError) {

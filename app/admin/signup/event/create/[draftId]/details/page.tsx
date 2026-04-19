@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import Link from "next/link"
 import { useEffect, useMemo, useState, useRef, type CSSProperties, type RefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { createClient } from "@/app/lib/supabase/client"
 
 type EventMode = "tickets" | "locations" | "both"
 type InventoryStatus = "draft" | "live" | "scheduled" | "ended"
@@ -31,14 +32,48 @@ type TicketItem = {
 
 type LocationItem = {
   id: string
+  venueZoneId: string
   name: string
   description: string
   price: string
   capacity: string
+  minGuests: string
+  maxGuests: string
+  depositAmount: string
+  minimumSpend: string
   quantityVisible: boolean
   status: InventoryStatus
   bookingStart: string
   bookingEnd: string
+}
+
+type VenueZoneOption = {
+  id: string
+  venue_id: string
+  code: string
+  name: string
+  slug: string | null
+  description: string | null
+  zone_type: string
+  access_type: string
+  capacity: number | null
+  min_guests: number | null
+  max_guests: number | null
+  base_price: number | null
+  deposit_amount: number | null
+  minimum_spend: number | null
+  currency: string
+  status: string
+  inventory_mode: string
+  display_order: number
+  image_url: string | null
+  notes: string | null
+  is_active: boolean
+}
+
+type EventContextRow = {
+  id: string
+  venue_id: string
 }
 
 type PromoCodeItem = {
@@ -82,6 +117,8 @@ type EventDraftRecord = {
     promoCodes: PromoCodeItem[]
   }
 }
+
+
 
 function PlusIcon() {
   return (
@@ -215,10 +252,15 @@ function emptyTicket(): TicketItem {
 function emptyLocation(): LocationItem {
   return {
     id: createItemId(),
+    venueZoneId: "",
     name: "",
     description: "",
     price: "",
     capacity: "",
+    minGuests: "",
+    maxGuests: "",
+    depositAmount: "",
+    minimumSpend: "",
     quantityVisible: false,
     status: "draft",
     bookingStart: "",
@@ -269,10 +311,15 @@ function normalizeTicket(item: Partial<TicketItem>): TicketItem {
 function normalizeLocation(item: Partial<LocationItem>): LocationItem {
   return {
     id: item.id || createItemId(),
+    venueZoneId: item.venueZoneId || "",
     name: item.name || "",
     description: item.description || "",
     price: item.price || "",
     capacity: item.capacity || "",
+    minGuests: item.minGuests || "",
+    maxGuests: item.maxGuests || "",
+    depositAmount: item.depositAmount || "",
+    minimumSpend: item.minimumSpend || "",
     quantityVisible: Boolean(item.quantityVisible),
     status: item.status || "draft",
     bookingStart: item.bookingStart || "",
@@ -315,9 +362,7 @@ const tickets =
 const locations =
   Array.isArray(rawBooking.locations) && rawBooking.locations.length > 0
     ? rawBooking.locations.map((item: Partial<LocationItem>) => normalizeLocation(item))
-    : mode === "locations" || mode === "both"
-      ? [emptyLocation()]
-      : []
+    : []
 
 const promoCodes = Array.isArray(rawBooking.promoCodes)
   ? rawBooking.promoCodes.map((item: Partial<PromoCodeItem>) => normalizePromoCode(item))
@@ -349,6 +394,48 @@ function mergeDateTime(date: string, time: string) {
   if (date && time) return `${date}T${time}`
   if (date) return `${date}T00:00`
   return ""
+}
+
+function toInputString(value: number | null | undefined) {
+  if (value === null || value === undefined) return ""
+  return String(value)
+}
+
+function inventoryStatusFromZoneStatus(value: string): InventoryStatus {
+  if (value === "active") return "live"
+  if (value === "draft") return "draft"
+  if (value === "inactive" || value === "hidden" || value === "sold_out") return "ended"
+  return "draft"
+}
+
+function buildLocationFromVenueZone(
+  zone: VenueZoneOption,
+  eventDate: string,
+  startTime: string,
+  endTime: string
+): LocationItem {
+  const defaultStart =
+    eventDate && startTime ? `${eventDate}T${startTime}` : ""
+
+  const defaultEnd =
+    eventDate && endTime ? `${eventDate}T${endTime}` : ""
+
+  return {
+    id: createItemId(),
+    venueZoneId: zone.id,
+    name: zone.name || "",
+    description: zone.description || "",
+    price: toInputString(zone.base_price),
+    capacity: toInputString(zone.capacity),
+    minGuests: toInputString(zone.min_guests),
+    maxGuests: toInputString(zone.max_guests),
+    depositAmount: toInputString(zone.deposit_amount),
+    minimumSpend: toInputString(zone.minimum_spend),
+    quantityVisible: false,
+    status: inventoryStatusFromZoneStatus(zone.status),
+    bookingStart: defaultStart,
+    bookingEnd: defaultEnd,
+  }
 }
 
 function setDatePart(value: string, nextDate: string) {
@@ -1224,20 +1311,277 @@ function WindowFields({
   )
 }
 
+type PersistedInventoryDraft = {
+  eventId: string
+  eventMode: EventMode
+  tickets: TicketItem[]
+  locations: LocationItem[]
+  promoCodes: PromoCodeItem[]
+  updatedAt: string
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function toNullableNumber(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function toNullableInteger(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = parseInt(trimmed, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function toPromoDiscountType(value: DiscountType) {
+  if (value === "fixed") return "fixed"
+  if (value === "percentage") return "percentage"
+  return null
+}
+
+function zoneCodeFromName(name: string, index: number) {
+  const clean = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+
+  return clean || `ZONE_${index + 1}`
+}
+
+async function saveInventoryDraftToEvent(
+  supabase: ReturnType<typeof createClient>,
+  payload: PersistedInventoryDraft
+) {
+  const { data: eventRow, error: eventError } = await supabase
+    .from("events")
+    .select("id, venue_id")
+    .eq("id", payload.eventId)
+    .single()
+
+  if (eventError || !eventRow) {
+    throw new Error(eventError?.message || "Could not load event context.")
+  }
+
+  const venueId = eventRow.venue_id ?? null
+
+  // ----------------------------
+  // SAVE TICKETS -> ticket_types
+  // ----------------------------
+  const ticketRows = payload.tickets.map((item, index) => {
+    let salesStatus = "upcoming"
+    if (item.status === "live") salesStatus = "live"
+    if (item.status === "ended") salesStatus = "ended"
+
+    return {
+      event_id: payload.eventId,
+      event_date_id: null,
+      name: item.name.trim() || `Ticket ${index + 1}`,
+      description: item.description.trim() || null,
+      category_label: null,
+      price: toNullableNumber(item.price) ?? 0,
+      currency: "USD",
+      quantity_total: toNullableInteger(item.quantity) ?? 0,
+      quantity_sold: 0,
+      per_order_limit: null,
+      sale_start_at: item.salesStart || null,
+      sale_end_at: item.salesEnd || null,
+      sales_status: salesStatus,
+      status: item.status === "draft" ? "draft" : "active",
+      sort_order: index,
+      is_visible: item.quantityVisible,
+      updated_at: payload.updatedAt,
+      subtitle: null,
+      image_path: null,
+      benefits: [],
+      badge_label: null,
+    }
+  })
+
+  const { error: deleteTicketsError } = await supabase
+    .from("ticket_types")
+    .delete()
+    .eq("event_id", payload.eventId)
+
+  if (deleteTicketsError) {
+    throw new Error(`Could not clear existing tickets: ${deleteTicketsError.message}`)
+  }
+
+  if (ticketRows.length > 0) {
+    const { error: insertTicketsError } = await supabase
+      .from("ticket_types")
+      .insert(ticketRows)
+
+    if (insertTicketsError) {
+      throw new Error(`Could not save tickets: ${insertTicketsError.message}`)
+    }
+  }
+
+  // ----------------------------
+  // SAVE LOCATIONS -> table_zones
+  // ----------------------------
+  const zoneRows = payload.locations
+    .filter((item) => item.venueZoneId)
+    .map((item, index) => {
+      const displayName = item.name.trim() || `Location ${index + 1}`
+      const slug = slugify(displayName)
+
+      return {
+        event_id: payload.eventId,
+        venue_id: venueId,
+        venue_zone_id: item.venueZoneId,
+        code: zoneCodeFromName(displayName, index),
+        name: displayName,
+        slug: slug || null,
+        description: item.description.trim() || null,
+        zone_type: "table",
+        access_type: "reservation",
+        capacity: toNullableInteger(item.capacity),
+        min_guests: toNullableInteger(item.minGuests),
+        max_guests: toNullableInteger(item.maxGuests),
+        base_price: toNullableNumber(item.price),
+        deposit_amount: toNullableNumber(item.depositAmount),
+        minimum_spend: toNullableNumber(item.minimumSpend),
+        currency: "USD",
+        status: item.status === "ended" ? "inactive" : "active",
+        inventory_mode: "single",
+        display_order: index,
+        image_url: null,
+        notes: null,
+        metadata: {
+          source: "event-create-details",
+          bookingStart: item.bookingStart || null,
+          bookingEnd: item.bookingEnd || null,
+          quantityVisible: item.quantityVisible,
+          localDraftId: item.id,
+        },
+        is_active: item.status !== "ended",
+        updated_at: payload.updatedAt,
+      }
+    })
+
+  const { error: deleteZonesError } = await supabase
+    .from("table_zones")
+    .delete()
+    .eq("event_id", payload.eventId)
+
+  if (deleteZonesError) {
+    throw new Error(`Could not clear existing locations: ${deleteZonesError.message}`)
+  }
+
+  if (zoneRows.length > 0) {
+    const { error: insertZonesError } = await supabase
+      .from("table_zones")
+      .insert(zoneRows)
+
+    if (insertZonesError) {
+      throw new Error(`Could not save locations: ${insertZonesError.message}`)
+    }
+  }
+
+  // ----------------------------
+  // SAVE PROMO CODES -> promo_codes
+  // ----------------------------
+  const validPromoRows = payload.promoCodes
+    .filter((item) => item.code.trim())
+    .map((item) => {
+      const discountType = toPromoDiscountType(item.discountType)
+
+      if (!discountType) {
+        return null
+      }
+
+      return {
+        code: item.code.trim().toUpperCase(),
+        event_id: payload.eventId,
+        ticket_type_id: null,
+        discount_type: discountType,
+        discount_value: toNullableNumber(item.discountValue) ?? 0,
+        max_discount_amount: null,
+        usage_limit: toNullableInteger(item.usageLimit),
+        starts_at: item.activeStart || null,
+        ends_at: item.activeEnd || null,
+        active: true,
+        updated_at: payload.updatedAt,
+      }
+    })
+    .filter(Boolean)
+
+  const { error: deletePromoError } = await supabase
+    .from("promo_codes")
+    .delete()
+    .eq("event_id", payload.eventId)
+
+  if (deletePromoError) {
+    throw new Error(`Could not clear existing promo codes: ${deletePromoError.message}`)
+  }
+
+  if (validPromoRows.length > 0) {
+    const { error: insertPromoError } = await supabase
+      .from("promo_codes")
+      .insert(validPromoRows)
+
+    if (insertPromoError) {
+      throw new Error(`Could not save promo codes: ${insertPromoError.message}`)
+    }
+  }
+
+  // ----------------------------
+  // TOUCH EVENT UPDATED_AT
+  // ----------------------------
+  const { error: touchEventError } = await supabase
+    .from("events")
+    .update({
+      updated_at: payload.updatedAt,
+    })
+    .eq("id", payload.eventId)
+
+  if (touchEventError) {
+    throw new Error(touchEventError.message)
+  }
+}
+
 export default function AdminSignupEventDetailsPage() {
   const params = useParams<{ draftId: string }>()
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const draftId = Array.isArray(params?.draftId) ? params.draftId[0] : params?.draftId ?? ""
 
   const [draft, setDraft] = useState<EventDraftRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [isCompact, setIsCompact] = useState(false)
 
+  const [eventContext, setEventContext] = useState<EventContextRow | null>(null)
+  const [venueZones, setVenueZones] = useState<VenueZoneOption[]>([])
+  const [loadingVenueZones, setLoadingVenueZones] = useState(false)
+
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
+  const saveTimeoutRef = useRef<number | null>(null)
+
   useEffect(() => {
     const sync = () => setIsCompact(window.innerWidth <= 640)
     sync()
     window.addEventListener("resize", sync)
     return () => window.removeEventListener("resize", sync)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+        if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current)
+        }
+    }
   }, [])
 
   useEffect(() => {
@@ -1256,28 +1600,109 @@ export default function AdminSignupEventDetailsPage() {
     setLoading(false)
   }, [draftId, router])
 
-  const saveAndSetDraft = (nextDraft: EventDraftRecord) => {
-    const cleanedPromoCodes = nextDraft.booking.promoCodes.map((code) => ({
-      ...code,
-      selectedTicketIds: clampSelectedIds(code.selectedTicketIds, nextDraft.booking.tickets),
-      selectedLocationIds: clampSelectedIds(
-        code.selectedLocationIds,
-        nextDraft.booking.locations
-      ),
-    }))
+  useEffect(() => {
+    let active = true
 
-    const record = {
-      ...nextDraft,
-      updatedAt: new Date().toISOString(),
-      booking: {
-        ...nextDraft.booking,
-        promoCodes: cleanedPromoCodes,
-      },
+    async function loadVenueZones() {
+      if (!draftId) return
+
+      setLoadingVenueZones(true)
+
+      const { data: eventRow, error: eventError } = await supabase
+        .from("events")
+        .select("id, venue_id")
+        .eq("id", draftId)
+        .single()
+
+      if (!active) return
+
+      if (eventError || !eventRow) {
+        setLoadingVenueZones(false)
+        return
+      }
+
+      setEventContext(eventRow as EventContextRow)
+
+      const { data: zoneRows, error: zoneError } = await supabase
+        .from("venue_zones")
+        .select("*")
+        .eq("venue_id", eventRow.venue_id)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true })
+
+      if (!active) return
+
+      if (!zoneError) {
+        setVenueZones((zoneRows || []) as VenueZoneOption[])
+      }
+
+      setLoadingVenueZones(false)
     }
 
-    setDraft(record)
-    writeDraft(record)
+    void loadVenueZones()
+
+    return () => {
+      active = false
+    }
+  }, [draftId, supabase])
+
+  const queueDbSave = (record: EventDraftRecord) => {
+  if (saveTimeoutRef.current) {
+    window.clearTimeout(saveTimeoutRef.current)
   }
+
+  saveTimeoutRef.current = window.setTimeout(async () => {
+    try {
+      setIsSaving(true)
+      setSaveError("")
+
+      await saveInventoryDraftToEvent(supabase, {
+        eventId: record.id,
+        eventMode: record.basics.eventMode,
+        tickets: record.booking.tickets,
+        locations: record.booking.locations,
+        promoCodes: record.booking.promoCodes,
+        updatedAt: record.updatedAt,
+      })
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Could not save booking details."
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }, 500)
+}
+
+  const saveAndSetDraft = (nextDraft: EventDraftRecord) => {
+  const cleanedPromoCodes = nextDraft.booking.promoCodes.map((code) => ({
+    ...code,
+    selectedTicketIds: clampSelectedIds(
+      code.selectedTicketIds,
+      nextDraft.booking.tickets
+    ),
+    selectedLocationIds: clampSelectedIds(
+      code.selectedLocationIds,
+      nextDraft.booking.locations
+    ),
+  }))
+
+  const record: EventDraftRecord = {
+    ...nextDraft,
+    updatedAt: new Date().toISOString(),
+    booking: {
+      ...nextDraft.booking,
+      promoCodes: cleanedPromoCodes,
+    },
+  }
+
+  setDraft(record)
+  writeDraft(record)
+  queueDbSave(record)
+}
 
   const mode = draft?.basics.eventMode ?? "both"
   const showTickets = mode === "tickets" || mode === "both"
@@ -1321,6 +1746,45 @@ export default function AdminSignupEventDetailsPage() {
         ...draft.booking,
         locations: draft.booking.locations.map((item) =>
           item.id === id ? { ...item, ...patch } : item
+        ),
+      },
+    })
+  }
+
+  const addVenueZoneToLocations = (zone: VenueZoneOption) => {
+    if (!draft) return
+
+    const alreadySelected = draft.booking.locations.some(
+      (item) => item.venueZoneId === zone.id
+    )
+
+    if (alreadySelected) return
+
+    const nextLocation = buildLocationFromVenueZone(
+      zone,
+      draft.basics.eventDate,
+      draft.basics.startTime,
+      draft.basics.endTime
+    )
+
+    saveAndSetDraft({
+      ...draft,
+      booking: {
+        ...draft.booking,
+        locations: [...draft.booking.locations, nextLocation],
+      },
+    })
+  }
+
+  const removeVenueZoneFromLocations = (venueZoneId: string) => {
+    if (!draft) return
+
+    saveAndSetDraft({
+      ...draft,
+      booking: {
+        ...draft.booking,
+        locations: draft.booking.locations.filter(
+          (item) => item.venueZoneId !== venueZoneId
         ),
       },
     })
@@ -1395,34 +1859,34 @@ export default function AdminSignupEventDetailsPage() {
   })
 }
 
-  const addLocation = () => {
-  if (!draft) return
+//   const addLocation = () => {
+//   if (!draft) return
 
-  const defaultStart =
-    draft.basics.eventDate && draft.basics.startTime
-      ? `${draft.basics.eventDate}T${draft.basics.startTime}`
-      : ""
+//   const defaultStart =
+//     draft.basics.eventDate && draft.basics.startTime
+//       ? `${draft.basics.eventDate}T${draft.basics.startTime}`
+//       : ""
 
-  const defaultEnd =
-    draft.basics.eventDate && draft.basics.endTime
-      ? `${draft.basics.eventDate}T${draft.basics.endTime}`
-      : ""
+//   const defaultEnd =
+//     draft.basics.eventDate && draft.basics.endTime
+//       ? `${draft.basics.eventDate}T${draft.basics.endTime}`
+//       : ""
 
-  saveAndSetDraft({
-    ...draft,
-    booking: {
-      ...draft.booking,
-      locations: [
-        ...draft.booking.locations,
-        {
-          ...emptyLocation(),
-          bookingStart: defaultStart,
-          bookingEnd: defaultEnd,
-        },
-      ],
-    },
-  })
-}
+//   saveAndSetDraft({
+//     ...draft,
+//     booking: {
+//       ...draft.booking,
+//       locations: [
+//         ...draft.booking.locations,
+//         {
+//           ...emptyLocation(),
+//           bookingStart: defaultStart,
+//           bookingEnd: defaultEnd,
+//         },
+//       ],
+//     },
+//   })
+// }
 
   const addPromoCode = () => {
   if (!draft) return
@@ -1965,106 +2429,106 @@ export default function AdminSignupEventDetailsPage() {
 
           {showTickets ? (
             <div style={styles.section}>
-              <div style={styles.sectionTop}>
+                <div style={styles.sectionTop}>
                 <div style={styles.sectionLabel}>Tickets</div>
                 <div style={styles.countBadge}>{ticketCountLabel}</div>
-              </div>
+                </div>
 
-              {draft.booking.tickets.map((ticket, index) => (
+                {draft.booking.tickets.map((ticket, index) => (
                 <div key={ticket.id} style={styles.itemCard}>
-                  <div style={styles.itemHeader}>
+                    <div style={styles.itemHeader}>
                     <div style={styles.itemTitle}>Ticket {index + 1}</div>
 
                     {draft.booking.tickets.length > 1 ? (
-                      <button
+                        <button
                         type="button"
                         style={styles.ghostDanger}
                         onClick={() => removeTicket(ticket.id)}
                         aria-label={`Remove ticket ${index + 1}`}
-                      >
+                        >
                         <TrashIcon />
-                      </button>
+                        </button>
                     ) : null}
-                  </div>
+                    </div>
 
-                  <div style={{ display: "grid", gap: 14 }}>
+                    <div style={{ display: "grid", gap: 14 }}>
                     <div>
-                      <label style={styles.fieldLabel}>Ticket Name</label>
-                      <div style={styles.fieldShell}>
+                        <label style={styles.fieldLabel}>Ticket Name</label>
+                        <div style={styles.fieldShell}>
                         <input
-                          style={styles.fieldInput}
-                          type="text"
-                          placeholder="General Admission"
-                          value={ticket.name}
-                          onChange={(e) => updateTicket(ticket.id, { name: e.target.value })}
+                            style={styles.fieldInput}
+                            type="text"
+                            placeholder="General Admission"
+                            value={ticket.name}
+                            onChange={(e) => updateTicket(ticket.id, { name: e.target.value })}
                         />
-                      </div>
+                        </div>
                     </div>
 
                     <div>
-                      <label style={styles.fieldLabel}>Ticket Description</label>
-                      <div style={styles.textareaShell}>
+                        <label style={styles.fieldLabel}>Ticket Description</label>
+                        <div style={styles.textareaShell}>
                         <textarea
-                          style={styles.textarea}
-                          placeholder="Admits one guest. Includes standard event access."
-                          value={ticket.description}
-                          onChange={(e) =>
+                            style={styles.textarea}
+                            placeholder="Admits one guest. Includes standard event access."
+                            value={ticket.description}
+                            onChange={(e) =>
                             updateTicket(ticket.id, { description: e.target.value })
-                          }
+                            }
                         />
-                      </div>
+                        </div>
                     </div>
 
                     <div style={grid3}>
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Price</label>
                         <div style={styles.fieldShell}>
-                          <input
+                            <input
                             style={styles.fieldInput}
                             type="text"
                             inputMode="decimal"
                             placeholder="25.00"
                             value={ticket.price}
                             onChange={(e) => updateTicket(ticket.id, { price: e.target.value })}
-                          />
+                            />
                         </div>
-                      </div>
+                        </div>
 
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Quantity</label>
                         <div style={styles.fieldShell}>
-                          <input
+                            <input
                             style={styles.fieldInput}
                             type="text"
                             inputMode="numeric"
                             placeholder="150"
                             value={ticket.quantity}
                             onChange={(e) =>
-                              updateTicket(ticket.id, { quantity: e.target.value })
+                                updateTicket(ticket.id, { quantity: e.target.value })
                             }
-                          />
+                            />
                         </div>
-                      </div>
+                        </div>
 
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Status</label>
                         <div style={styles.fieldSelectShell}>
-                          <select
+                            <select
                             style={styles.fieldSelect}
                             value={ticket.status}
                             onChange={(e) =>
-                              updateTicket(ticket.id, {
+                                updateTicket(ticket.id, {
                                 status: e.target.value as InventoryStatus,
-                              })
+                                })
                             }
-                          >
+                            >
                             <option value="draft">Draft</option>
                             <option value="live">Live</option>
                             <option value="scheduled">Scheduled</option>
                             <option value="ended">Ended</option>
-                          </select>
+                            </select>
                         </div>
-                      </div>
+                        </div>
                     </div>
 
                     <WindowFields
@@ -2078,172 +2542,289 @@ export default function AdminSignupEventDetailsPage() {
                     />
 
                     <div style={styles.toggleRow}>
-                      <div>
+                        <div>
                         <div style={styles.toggleLabel}>Show quantity to customer</div>
                         <div style={styles.helper}>
-                          Turn this on when you want buyers to see remaining ticket inventory.
+                            Turn this on when you want buyers to see remaining ticket inventory.
                         </div>
-                      </div>
-                      <Toggle
+                        </div>
+                        <Toggle
                         checked={ticket.quantityVisible}
                         onChange={(value) =>
-                          updateTicket(ticket.id, { quantityVisible: value })
+                            updateTicket(ticket.id, { quantityVisible: value })
                         }
-                      />
+                        />
                     </div>
-                  </div>
+                    </div>
                 </div>
-              ))}
+                ))}
 
-              <div style={styles.addRow}>
+                <div style={styles.addRow}>
                 <button type="button" style={styles.addButton} onClick={addTicket}>
-                  <PlusIcon />
-                  Add Ticket
+                    <PlusIcon />
+                    Add Ticket
                 </button>
-              </div>
+                </div>
             </div>
-          ) : null}
+            ) : null}
 
-          {showLocations ? (
+            {showLocations ? (
             <div style={styles.section}>
-              <div style={styles.sectionTop}>
+                <div style={styles.sectionTop}>
                 <div style={styles.sectionLabel}>Locations</div>
                 <div style={styles.countBadge}>{locationCountLabel}</div>
-              </div>
+                </div>
 
-              {draft.booking.locations.map((item, index) => (
+                <div style={{ display: "grid", gap: 12, marginBottom: 14 }}>
+                <div style={styles.helper}>
+                    Select from the venue’s existing mapped zones, then adjust event-specific pricing and guest settings below.
+                </div>
+
+                {loadingVenueZones ? (
+                    <div style={styles.helper}>Loading venue zones...</div>
+                ) : venueZones.length ? (
+                    <div
+                    style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 10,
+                    }}
+                    >
+                    {venueZones.map((zone) => {
+                        const selected = draft.booking.locations.some(
+                        (item) => item.venueZoneId === zone.id
+                        )
+
+                        return (
+                        <button
+                            key={zone.id}
+                            type="button"
+                            onClick={() =>
+                            selected
+                                ? removeVenueZoneFromLocations(zone.id)
+                                : addVenueZoneToLocations(zone)
+                            }
+                            style={{
+                            minHeight: 40,
+                            borderRadius: 999,
+                            border: selected
+                                ? "1px solid rgba(14,165,233,0.28)"
+                                : "1px solid rgba(148,163,184,0.18)",
+                            background: selected
+                                ? "linear-gradient(135deg, rgba(56,189,248,0.16) 0%, rgba(34,211,238,0.16) 100%)"
+                                : "rgba(255,255,255,0.72)",
+                            color: selected ? "#0369a1" : "#334155",
+                            fontSize: 13,
+                            fontWeight: 800,
+                            padding: "0 14px",
+                            cursor: "pointer",
+                            boxShadow: selected
+                                ? "0 10px 22px rgba(56,189,248,0.10)"
+                                : "inset 0 1px 0 rgba(255,255,255,0.68)",
+                            }}
+                        >
+                            {zone.name}
+                        </button>
+                        )
+                    })}
+                    </div>
+                ) : (
+                    <div style={styles.helper}>
+                    No active venue zones were found for this venue.
+                    </div>
+                )}
+                </div>
+
+                {draft.booking.locations.map((item, index) => (
                 <div key={item.id} style={styles.itemCard}>
-                  <div style={styles.itemHeader}>
+                    <div style={styles.itemHeader}>
                     <div style={styles.itemTitle}>Location {index + 1}</div>
 
                     {draft.booking.locations.length > 1 ? (
-                      <button
+                        <button
                         type="button"
                         style={styles.ghostDanger}
                         onClick={() => removeLocation(item.id)}
                         aria-label={`Remove location ${index + 1}`}
-                      >
+                        >
                         <TrashIcon />
-                      </button>
+                        </button>
                     ) : null}
-                  </div>
+                    </div>
 
-                  <div style={{ display: "grid", gap: 14 }}>
+                    <div style={{ display: "grid", gap: 14 }}>
                     <div>
-                      <label style={styles.fieldLabel}>Location Name</label>
-                      <div style={styles.fieldShell}>
+                        <label style={styles.fieldLabel}>Location Name</label>
+                        <div style={styles.fieldShell}>
                         <input
-                          style={styles.fieldInput}
-                          type="text"
-                          placeholder="VIP Booth A"
-                          value={item.name}
-                          onChange={(e) => updateLocation(item.id, { name: e.target.value })}
+                            style={styles.fieldInput}
+                            type="text"
+                            placeholder="VIP Booth A"
+                            value={item.name}
+                            onChange={(e) => updateLocation(item.id, { name: e.target.value })}
                         />
-                      </div>
+                        </div>
                     </div>
 
                     <div>
-                      <label style={styles.fieldLabel}>Location Description</label>
-                      <div style={styles.textareaShell}>
+                        <label style={styles.fieldLabel}>Location Description</label>
+                        <div style={styles.textareaShell}>
                         <textarea
-                          style={styles.textarea}
-                          placeholder="Seats up to 6 guests with premium placement."
-                          value={item.description}
-                          onChange={(e) =>
+                            style={styles.textarea}
+                            placeholder="Seats up to 6 guests with premium placement."
+                            value={item.description}
+                            onChange={(e) =>
                             updateLocation(item.id, { description: e.target.value })
-                          }
+                            }
                         />
-                      </div>
+                        </div>
                     </div>
 
                     <div style={grid3}>
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Price</label>
                         <div style={styles.fieldShell}>
-                          <input
+                            <input
                             style={styles.fieldInput}
                             type="text"
                             inputMode="decimal"
                             placeholder="250.00"
                             value={item.price}
                             onChange={(e) => updateLocation(item.id, { price: e.target.value })}
-                          />
+                            />
                         </div>
-                      </div>
+                        </div>
 
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Capacity</label>
                         <div style={styles.fieldShell}>
-                          <input
+                            <input
                             style={styles.fieldInput}
                             type="text"
                             inputMode="numeric"
                             placeholder="6"
                             value={item.capacity}
                             onChange={(e) =>
-                              updateLocation(item.id, { capacity: e.target.value })
+                                updateLocation(item.id, { capacity: e.target.value })
                             }
-                          />
+                            />
                         </div>
-                      </div>
+                        </div>
 
-                      <div>
+                        <div>
                         <label style={styles.fieldLabel}>Status</label>
                         <div style={styles.fieldSelectShell}>
-                          <select
+                            <select
                             style={styles.fieldSelect}
                             value={item.status}
                             onChange={(e) =>
-                              updateLocation(item.id, {
+                                updateLocation(item.id, {
                                 status: e.target.value as InventoryStatus,
-                              })
+                                })
                             }
-                          >
+                            >
                             <option value="draft">Draft</option>
                             <option value="live">Live</option>
                             <option value="scheduled">Scheduled</option>
                             <option value="ended">Ended</option>
-                          </select>
+                            </select>
                         </div>
-                      </div>
+                        </div>
+
+                        <div>
+                        <label style={styles.fieldLabel}>Min Guests</label>
+                        <div style={styles.fieldShell}>
+                            <input
+                            style={styles.fieldInput}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="2"
+                            value={item.minGuests}
+                            onChange={(e) =>
+                                updateLocation(item.id, { minGuests: e.target.value })
+                            }
+                            />
+                        </div>
+                        </div>
+
+                        <div>
+                        <label style={styles.fieldLabel}>Max Guests</label>
+                        <div style={styles.fieldShell}>
+                            <input
+                            style={styles.fieldInput}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="8"
+                            value={item.maxGuests}
+                            onChange={(e) =>
+                                updateLocation(item.id, { maxGuests: e.target.value })
+                            }
+                            />
+                        </div>
+                        </div>
+
+                        <div>
+                        <label style={styles.fieldLabel}>Deposit</label>
+                        <div style={styles.fieldShell}>
+                            <input
+                            style={styles.fieldInput}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="100.00"
+                            value={item.depositAmount}
+                            onChange={(e) =>
+                                updateLocation(item.id, { depositAmount: e.target.value })
+                            }
+                            />
+                        </div>
+                        </div>
+
+                        <div>
+                        <label style={styles.fieldLabel}>Minimum Spend</label>
+                        <div style={styles.fieldShell}>
+                            <input
+                            style={styles.fieldInput}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="500.00"
+                            value={item.minimumSpend}
+                            onChange={(e) =>
+                                updateLocation(item.id, { minimumSpend: e.target.value })
+                            }
+                            />
+                        </div>
+                        </div>
                     </div>
 
                     <WindowFields
-  label="Booking Window"
-  valueStart={item.bookingStart}
-  valueEnd={item.bookingEnd}
-  onChangeStart={(next) => updateLocation(item.id, { bookingStart: next })}
-  onChangeEnd={(next) => updateLocation(item.id, { bookingEnd: next })}
-  styles={styles}
-  isMobile={isCompact}
-/>
+                        label="Booking Window"
+                        valueStart={item.bookingStart}
+                        valueEnd={item.bookingEnd}
+                        onChangeStart={(next) => updateLocation(item.id, { bookingStart: next })}
+                        onChangeEnd={(next) => updateLocation(item.id, { bookingEnd: next })}
+                        styles={styles}
+                        isMobile={isCompact}
+                    />
 
                     <div style={styles.toggleRow}>
-                      <div>
+                        <div>
                         <div style={styles.toggleLabel}>Show quantity to customer</div>
                         <div style={styles.helper}>
-                          Use this when you want guests to see how much location inventory remains.
+                            Use this when you want guests to see how much location inventory remains.
                         </div>
-                      </div>
-                      <Toggle
+                        </div>
+                        <Toggle
                         checked={item.quantityVisible}
                         onChange={(value) =>
-                          updateLocation(item.id, { quantityVisible: value })
+                            updateLocation(item.id, { quantityVisible: value })
                         }
-                      />
+                        />
                     </div>
-                  </div>
+                    </div>
                 </div>
-              ))}
-
-              <div style={styles.addRow}>
-                <button type="button" style={styles.addButton} onClick={addLocation}>
-                  <PlusIcon />
-                  Add Location
-                </button>
-              </div>
+                ))}
             </div>
-          ) : null}
+            ) : null}
 
           <div style={styles.section}>
             <div style={styles.sectionTop}>
@@ -2472,6 +3053,42 @@ export default function AdminSignupEventDetailsPage() {
             </div>
           </div>
 
+          {saveError ? (
+            <div
+                style={{
+                marginTop: 14,
+                borderRadius: 16,
+                padding: "12px 14px",
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px solid rgba(239, 68, 68, 0.18)",
+                color: "#b91c1c",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.5,
+                }}
+            >
+                {saveError}
+            </div>
+            ) : null}
+
+            {isSaving ? (
+            <div
+                style={{
+                marginTop: 14,
+                borderRadius: 16,
+                padding: "12px 14px",
+                background: "rgba(15, 118, 110, 0.07)",
+                border: "1px solid rgba(15, 118, 110, 0.14)",
+                color: "#0f766e",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.5,
+                }}
+            >
+                Saving changes...
+            </div>
+            ) : null}
+
           <section style={styles.stickyFooter}>
             <div style={styles.stickyBar}>
               <Link href="/admin/signup/event/create" style={styles.footerGhostLink}>
@@ -2481,7 +3098,8 @@ export default function AdminSignupEventDetailsPage() {
               <button
                 type="button"
                 style={styles.footerPrimary}
-                onClick={() => router.push(`/admin/signup/event/create/${draft.id}/payment`)}
+                //onClick={() => router.push(`/admin/signup/event/create/${draft.id}/payment`)}
+                onClick={() =>router.push(`/admin/signup/hybrid/create?venueId=${eventContext?.venue_id || ""}`)}
                 >
                 Continue
               </button>

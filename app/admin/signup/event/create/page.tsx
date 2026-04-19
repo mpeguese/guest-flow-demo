@@ -1,6 +1,7 @@
 // app/admin/signup/event/create/page.tsx
 "use client"
 import { createPortal } from "react-dom"
+import { createClient } from "@/app/lib/supabase/client"
 
 import Link from "next/link"
 import {
@@ -1807,8 +1808,128 @@ function TimeWheel({
   )
 }
 
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function shortToken(length = 4) {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789"
+  let out = ""
+  for (let i = 0; i < length; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return out
+}
+
+async function ensureEventSlug(
+  supabase: ReturnType<typeof createClient>,
+  title: string
+) {
+  const base = slugify(title)
+
+  if (!base) {
+    throw new Error("Please enter a valid event title.")
+  }
+
+  const { data, error } = await supabase
+    .from("events")
+    .select("id")
+    .eq("slug", base)
+    .limit(1)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data || data.length === 0) {
+    return base
+  }
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = `${base}-${shortToken(4)}`
+    const { data: tokenRows, error: tokenError } = await supabase
+      .from("events")
+      .select("id")
+      .eq("slug", candidate)
+      .limit(1)
+
+    if (tokenError) {
+      throw new Error(tokenError.message)
+    }
+
+    if (!tokenRows || tokenRows.length === 0) {
+      return candidate
+    }
+  }
+
+  return `${base}-${Date.now().toString(36)}`
+}
+
+async function resolveActiveVenueContext(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+) {
+  const { data: adminLinks, error: adminLinksError } = await supabase
+    .from("business_admins")
+    .select("business_id, is_primary")
+    .eq("user_id", userId)
+    .order("is_primary", { ascending: false })
+
+  if (adminLinksError) {
+    throw new Error(`Could not load business links: ${adminLinksError.message}`)
+  }
+
+  const primaryLink = adminLinks?.[0]
+
+  if (!primaryLink?.business_id) {
+    throw new Error("No business is linked to this user.")
+  }
+
+  const { data: venues, error: venuesError } = await supabase
+    .from("venues")
+    .select("id, name, timezone, business_id")
+    .eq("business_id", primaryLink.business_id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+
+  if (venuesError) {
+    throw new Error(`Could not load venue: ${venuesError.message}`)
+  }
+
+  const venue = venues?.[0]
+
+  if (!venue?.id) {
+    throw new Error("No venue is linked to this business.")
+  }
+
+  return {
+    businessId: primaryLink.business_id,
+    venueId: venue.id,
+    venueName: venue.name || "",
+    timezone: venue.timezone || "America/New_York",
+  }
+}
+
+function buildLocalDateTime(date: string, time: string) {
+  if (!date || !time) return ""
+  const next = new Date(`${date}T${time}:00`)
+  if (Number.isNaN(next.getTime())) return ""
+  return next.toISOString()
+}
+
+function getFileExtension(name: string) {
+  const parts = name.split(".")
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : ""
+}
+
 export default function AdminSignupEventCreatePage() {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
 
   const [isMobile, setIsMobile] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -1833,6 +1954,10 @@ export default function AdminSignupEventCreatePage() {
   const [flyerPreviewUrl, setFlyerPreviewUrl] = useState("")
   const [videoName, setVideoName] = useState("")
   const [videoPreviewUrl, setVideoPreviewUrl] = useState("")
+
+  const [flyerFile, setFlyerFile] = useState<File | null>(null)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [submitError, setSubmitError] = useState("")
 
   const [lightboxType, setLightboxType] = useState<"image" | "video" | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -1891,6 +2016,7 @@ export default function AdminSignupEventCreatePage() {
     const nextUrl = URL.createObjectURL(file)
     previousFlyerUrlRef.current = nextUrl
 
+    setFlyerFile(file)
     setFlyerName(file.name)
     setFlyerPreviewUrl(nextUrl)
   }
@@ -1906,36 +2032,164 @@ export default function AdminSignupEventCreatePage() {
     const nextUrl = URL.createObjectURL(file)
     previousVideoUrlRef.current = nextUrl
 
+    setVideoFile(file)
     setVideoName(file.name)
     setVideoPreviewUrl(nextUrl)
   }
 
-  const handleContinue = () => {
-    const basicValid =
-      eventTitle.trim() &&
-      description.trim() &&
-      location.trim() &&
-      eventDate &&
-      startTime &&
-      endTime
+  const handleContinue = async () => {
+  if (submitting) return
 
-    const seriesValid =
-      eventType === "single" ||
-      (seriesEndsMode === "occurrences"
-        ? repeatOccurrences >= 1
-        : Boolean(seriesEndDate))
+  setSubmitError("")
 
-    if (!basicValid || !seriesValid) {
-      return
+  const basicValid =
+    eventTitle.trim() &&
+    description.trim() &&
+    location.trim() &&
+    eventDate &&
+    startTime &&
+    endTime
+
+  const seriesValid =
+    eventType === "single" ||
+    (seriesEndsMode === "occurrences"
+      ? repeatOccurrences >= 1
+      : Boolean(seriesEndDate))
+
+  if (!basicValid || !seriesValid) {
+    setSubmitError("Please complete the required event fields before continuing.")
+    return
+  }
+
+  const startAt = buildLocalDateTime(eventDate, startTime)
+  const resolvedEndDate = eventEndDate || eventDate
+  const endAt = buildLocalDateTime(resolvedEndDate, endTime)
+
+  if (!startAt || !endAt) {
+    setSubmitError("Please choose valid start and end dates/times.")
+    return
+  }
+
+  setSubmitting(true)
+
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) {
+      throw new Error(userError.message)
     }
 
-    setSubmitting(true)
+    if (!user) {
+      throw new Error("You must be signed in to create an event.")
+    }
 
-    const draftId = createDraftId()
+    const venueContext = await resolveActiveVenueContext(supabase, user.id)
+    const slug = await ensureEventSlug(supabase, eventTitle.trim())
+
+    const { data: insertedEvent, error: insertError } = await supabase
+      .from("events")
+      .insert({
+        venue_id: venueContext.venueId,
+        title: eventTitle.trim(),
+        slug,
+        description: description.trim(),
+        start_at: startAt,
+        end_at: endAt,
+        status: "draft",
+        flyer_image_url: null,
+        cover_image_url: null,
+        video_url: null,
+        event_type: eventType,
+        is_series: eventType === "series",
+        booking_type: eventMode,
+        timezone: venueContext.timezone || "America/New_York",
+        created_by: user.id,
+      })
+      .select("id")
+      .single()
+
+    if (insertError || !insertedEvent?.id) {
+      throw new Error(insertError?.message || "Could not create the event.")
+    }
+
+    const eventId = insertedEvent.id
+
+    let flyerImageUrl: string | null = null
+    let videoUrl: string | null = null
+
+    if (flyerFile) {
+      const flyerExt = getFileExtension(flyerFile.name) || "jpg"
+      const flyerPath = `${slug}/flyer/flyer.${flyerExt}`
+
+      const { error: flyerUploadError } = await supabase.storage
+        .from("event-assets")
+        .upload(flyerPath, flyerFile, {
+          upsert: true,
+          contentType: flyerFile.type || undefined,
+        })
+
+      if (flyerUploadError) {
+        throw new Error(`Flyer upload failed: ${flyerUploadError.message}`)
+      }
+
+      const { data: flyerPublic } = supabase.storage
+        .from("event-assets")
+        .getPublicUrl(flyerPath)
+
+      flyerImageUrl = flyerPublic.publicUrl
+    }
+
+    if (videoFile) {
+      const videoExt = getFileExtension(videoFile.name) || "mp4"
+      const videoPath = `${slug}/video/video.${videoExt}`
+
+      const { error: videoUploadError } = await supabase.storage
+        .from("event-assets")
+        .upload(videoPath, videoFile, {
+          upsert: true,
+          contentType: videoFile.type || undefined,
+        })
+
+      if (videoUploadError) {
+        throw new Error(`Video upload failed: ${videoUploadError.message}`)
+      }
+
+      const { data: videoPublic } = supabase.storage
+        .from("event-assets")
+        .getPublicUrl(videoPath)
+
+      videoUrl = videoPublic.publicUrl
+    }
+
+    const updatePayload: Record<string, string | null> = {}
+
+    if (flyerImageUrl) {
+      updatePayload.flyer_image_url = flyerImageUrl
+      updatePayload.cover_image_url = flyerImageUrl
+    }
+
+    if (videoUrl) {
+      updatePayload.video_url = videoUrl
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      const { error: updateError } = await supabase
+        .from("events")
+        .update(updatePayload)
+        .eq("id", eventId)
+
+      if (updateError) {
+        throw new Error(`Could not update event media: ${updateError.message}`)
+      }
+    }
+
     const now = new Date().toISOString()
 
     const draftRecord: EventDraftRecord = {
-      id: draftId,
+      id: eventId,
       status: "draft",
       createdAt: now,
       updatedAt: now,
@@ -1944,16 +2198,16 @@ export default function AdminSignupEventCreatePage() {
         eventType,
         eventTitle: eventTitle.trim(),
         eventDate,
-        eventEndDate: eventEndDate || eventDate,
+        eventEndDate: resolvedEndDate,
         seriesEndDate,
         startTime,
         endTime,
         description: description.trim(),
-        location: location.trim(),
+        location: venueContext.venueName || location.trim(),
         flyerName,
-        flyerPreviewUrl,
+        flyerPreviewUrl: flyerImageUrl || flyerPreviewUrl,
         videoName,
-        videoPreviewUrl,
+        videoPreviewUrl: videoUrl || videoPreviewUrl,
         repeatInterval,
         repeatUnit,
         repeatOnLabel,
@@ -1968,8 +2222,17 @@ export default function AdminSignupEventCreatePage() {
     }
 
     saveDraftToStorage(draftRecord)
-    router.push(`/admin/signup/event/create/${draftId}/details`)
+    router.push(`/admin/signup/event/create/${eventId}/details`)
+  } catch (error) {
+    setSubmitError(
+      error instanceof Error
+        ? error.message
+        : "Something went wrong while creating the event."
+    )
+  } finally {
+    setSubmitting(false)
   }
+}
 
   const sectionCard: CSSProperties = {
     borderRadius: isMobile ? 24 : 30,
@@ -2527,6 +2790,25 @@ export default function AdminSignupEventCreatePage() {
               </div>
             ) : null}
           </section>
+
+          {submitError ? (
+            <div
+                style={{
+                marginTop: 14,
+                marginBottom: 10,
+                borderRadius: 16,
+                padding: "12px 14px",
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px solid rgba(239, 68, 68, 0.18)",
+                color: "#b91c1c",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.5,
+                }}
+            >
+                {submitError}
+            </div>
+            ) : null}
 
           <section
             style={{

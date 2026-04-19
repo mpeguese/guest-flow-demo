@@ -553,7 +553,8 @@ export default function SignupHybridCreatePage() {
         const mapIds = activeMaps.map((map) => map.id)
 
         const { data: zoneRows, error: zoneError } = await supabase
-          .from("venue_map_zones")
+          //.from("venue_map_zones")
+          .from("venue_zones_coordinates")
           .select("id, venue_map_id")
           .in("venue_map_id", mapIds)
           .eq("is_active", true)
