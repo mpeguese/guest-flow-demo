@@ -74,6 +74,18 @@ type VenueZoneOption = {
 type EventContextRow = {
   id: string
   venue_id: string
+  slug: string | null
+  title: string | null
+  start_at: string | null
+  end_at: string | null
+  is_series: boolean | null
+}
+
+type EventDateRow = {
+  id: string
+  start_at: string | null
+  end_at: string | null
+  status: string | null
 }
 
 type PromoCodeItem = {
@@ -117,6 +129,7 @@ type EventDraftRecord = {
     promoCodes: PromoCodeItem[]
   }
 }
+
 
 
 
@@ -583,6 +596,26 @@ function CalendarIcon() {
   )
 }
 
+function CopyIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
 function isSameDay(left: Date, right: Date) {
   return (
     left.getFullYear() === right.getFullYear() &&
@@ -749,6 +782,8 @@ function TimeWheel({
     width: "100%",
     cursor: "pointer",
   }
+
+  
 
   return (
     <div
@@ -1428,7 +1463,7 @@ async function saveInventoryDraftToEvent(
   }
 
   // ----------------------------
-  // SAVE LOCATIONS -> table_zones
+  // SAVE LOCATIONS -> event_zones
   // ----------------------------
   const zoneRows = payload.locations
     .filter((item) => item.venueZoneId)
@@ -1471,7 +1506,7 @@ async function saveInventoryDraftToEvent(
     })
 
   const { error: deleteZonesError } = await supabase
-    .from("table_zones")
+    .from("event_zones")
     .delete()
     .eq("event_id", payload.eventId)
 
@@ -1481,7 +1516,7 @@ async function saveInventoryDraftToEvent(
 
   if (zoneRows.length > 0) {
     const { error: insertZonesError } = await supabase
-      .from("table_zones")
+      .from("event_zones")
       .insert(zoneRows)
 
     if (insertZonesError) {
@@ -1551,6 +1586,37 @@ async function saveInventoryDraftToEvent(
   }
 }
 
+function getBaseSiteUrl() {
+  const envUrl =
+    typeof process !== "undefined" ? process.env.NEXT_PUBLIC_SITE_URL : ""
+
+  if (envUrl && envUrl.trim()) {
+    return envUrl.replace(/\/+$/, "")
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin
+  }
+
+  return ""
+}
+
+function toDateParam(value: string | null | undefined) {
+  if (!value) return ""
+  return value.slice(0, 10)
+}
+
+function buildPublicEventLink(slug: string, date?: string) {
+  const baseUrl = getBaseSiteUrl()
+  const params = new URLSearchParams({ event: slug })
+
+  if (date) {
+    params.set("date", date)
+  }
+
+  return `${baseUrl}/book/map?${params.toString()}`
+}
+
 export default function AdminSignupEventDetailsPage() {
   const params = useParams<{ draftId: string }>()
   const router = useRouter()
@@ -1562,12 +1628,28 @@ export default function AdminSignupEventDetailsPage() {
   const [isCompact, setIsCompact] = useState(false)
 
   const [eventContext, setEventContext] = useState<EventContextRow | null>(null)
+  const [eventDates, setEventDates] = useState<EventDateRow[]>([])
   const [venueZones, setVenueZones] = useState<VenueZoneOption[]>([])
   const [loadingVenueZones, setLoadingVenueZones] = useState(false)
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
+  const [copiedLink, setCopiedLink] = useState("")
   const saveTimeoutRef = useRef<number | null>(null)
+
+  
+  const copyLink = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedLink(value)
+
+      window.setTimeout(() => {
+        setCopiedLink((current) => (current === value ? "" : current))
+      }, 1600)
+    } catch {
+      setSaveError("Could not copy the public booking link.")
+    }
+  }
 
   useEffect(() => {
     const sync = () => setIsCompact(window.innerWidth <= 640)
@@ -1604,41 +1686,53 @@ export default function AdminSignupEventDetailsPage() {
     let active = true
 
     async function loadVenueZones() {
-      if (!draftId) return
+  if (!draftId) return
 
-      setLoadingVenueZones(true)
+  setLoadingVenueZones(true)
 
-      const { data: eventRow, error: eventError } = await supabase
-        .from("events")
-        .select("id, venue_id")
-        .eq("id", draftId)
-        .single()
+  const { data: eventRow, error: eventError } = await supabase
+    .from("events")
+    .select("id, venue_id, slug, title, start_at, end_at, is_series")
+    .eq("id", draftId)
+    .single()
 
-      if (!active) return
+  if (!active) return
 
-      if (eventError || !eventRow) {
-        setLoadingVenueZones(false)
-        return
-      }
+  if (eventError || !eventRow) {
+    setLoadingVenueZones(false)
+    return
+  }
 
-      setEventContext(eventRow as EventContextRow)
+  setEventContext(eventRow as EventContextRow)
 
-      const { data: zoneRows, error: zoneError } = await supabase
-        .from("venue_zones")
-        .select("*")
-        .eq("venue_id", eventRow.venue_id)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true })
-        .order("created_at", { ascending: true })
+  const { data: eventDateRows, error: eventDatesError } = await supabase
+    .from("event_dates")
+    .select("id, start_at, end_at, status")
+    .eq("event_id", draftId)
+    .order("start_at", { ascending: true })
 
-      if (!active) return
+  if (!active) return
 
-      if (!zoneError) {
-        setVenueZones((zoneRows || []) as VenueZoneOption[])
-      }
+  if (!eventDatesError) {
+    setEventDates((eventDateRows || []) as EventDateRow[])
+  }
 
-      setLoadingVenueZones(false)
-    }
+  const { data: zoneRows, error: zoneError } = await supabase
+    .from("venue_zones")
+    .select("*")
+    .eq("venue_id", eventRow.venue_id)
+    .eq("is_active", true)
+    .order("display_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  if (!active) return
+
+  if (!zoneError) {
+    setVenueZones((zoneRows || []) as VenueZoneOption[])
+  }
+
+  setLoadingVenueZones(false)
+}
 
     void loadVenueZones()
 
@@ -1707,6 +1801,23 @@ export default function AdminSignupEventDetailsPage() {
   const mode = draft?.basics.eventMode ?? "both"
   const showTickets = mode === "tickets" || mode === "both"
   const showLocations = mode === "locations" || mode === "both"
+
+  const eventSlug = eventContext?.slug?.trim() || ""
+  const singleOccurrenceDate =
+    draft?.basics?.eventDate || toDateParam(eventContext?.start_at)
+
+  const publicBookingLink =
+    eventSlug
+      ? buildPublicEventLink(
+          eventSlug,
+          draft?.basics?.eventType === "series" ? singleOccurrenceDate : undefined
+        )
+      : ""
+
+const publicBookingHelper =
+  draft?.basics?.eventType === "series"
+    ? "This is the first occurrence link. Later, you can expand this to show one share link per occurrence."
+    : "This is the direct purchasing link for this event."
 
   const ticketCountLabel = useMemo(() => {
     if (!draft) return ""
@@ -1859,34 +1970,6 @@ export default function AdminSignupEventDetailsPage() {
   })
 }
 
-//   const addLocation = () => {
-//   if (!draft) return
-
-//   const defaultStart =
-//     draft.basics.eventDate && draft.basics.startTime
-//       ? `${draft.basics.eventDate}T${draft.basics.startTime}`
-//       : ""
-
-//   const defaultEnd =
-//     draft.basics.eventDate && draft.basics.endTime
-//       ? `${draft.basics.eventDate}T${draft.basics.endTime}`
-//       : ""
-
-//   saveAndSetDraft({
-//     ...draft,
-//     booking: {
-//       ...draft.booking,
-//       locations: [
-//         ...draft.booking.locations,
-//         {
-//           ...emptyLocation(),
-//           bookingStart: defaultStart,
-//           bookingEnd: defaultEnd,
-//         },
-//       ],
-//     },
-//   })
-// }
 
   const addPromoCode = () => {
   if (!draft) return
@@ -2384,6 +2467,73 @@ export default function AdminSignupEventDetailsPage() {
     color: "#64748B",
     pointerEvents: "none",
     },
+    shareCard: {
+  marginTop: 18,
+  borderRadius: isCompact ? 22 : 26,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.10)",
+  backdropFilter: "blur(22px)",
+  WebkitBackdropFilter: "blur(22px)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
+  padding: isCompact ? 16 : 18,
+},
+shareLabel: {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "1.4px",
+  textTransform: "uppercase",
+  color: "#64748b",
+},
+shareRow: {
+  marginTop: 10,
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  flexWrap: "wrap",
+},
+shareLinkShell: {
+  flex: 1,
+  minWidth: 0,
+  minHeight: 50,
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.22)",
+  background: "rgba(255,255,255,0.16)",
+  padding: "0 14px",
+  display: "flex",
+  alignItems: "center",
+  boxSizing: "border-box",
+},
+shareLinkText: {
+  width: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#0f172a",
+},
+shareCopyBtn: {
+  width: 50,
+  height: 50,
+  borderRadius: 16,
+  border: "1px solid rgba(56,189,248,0.18)",
+  background:
+    "linear-gradient(135deg, rgba(56,189,248,0.16) 0%, rgba(34,211,238,0.16) 100%)",
+  color: "#0369a1",
+  fontSize: 18,
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "grid",
+  placeItems: "center",
+  flexShrink: 0,
+},
+shareHelper: {
+  marginTop: 10,
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#64748b",
+  lineHeight: 1.5,
+},
   }
 
   if (loading || !draft) {
@@ -2426,6 +2576,30 @@ export default function AdminSignupEventDetailsPage() {
           <div style={styles.subtitle}>
             Build richer inventory with staged releases, cleaner availability windows, and promo attribution.
           </div>
+
+          {publicBookingLink ? (
+            <div style={styles.shareCard}>
+                <div style={styles.shareLabel}>Public Event Link</div>
+
+                <div style={styles.shareRow}>
+                <div style={styles.shareLinkShell}>
+                    <div style={styles.shareLinkText}>{publicBookingLink}</div>
+                </div>
+
+                <button
+                  type="button"
+                  style={styles.shareCopyBtn}
+                  onClick={() => void copyLink(publicBookingLink)}
+                  aria-label={copiedLink === publicBookingLink ? "Copied" : "Copy public booking link"}
+                  title={copiedLink === publicBookingLink ? "Copied" : "Copy link"}
+                >
+                  {copiedLink === publicBookingLink ? "✓" : <CopyIcon />}
+                </button>
+                </div>
+
+                <div style={styles.shareHelper}>{publicBookingHelper}</div>
+            </div>
+            ) : null}
 
           {showTickets ? (
             <div style={styles.section}>

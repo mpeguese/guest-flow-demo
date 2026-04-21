@@ -2343,27 +2343,6 @@ export default function AdminSignupEventCreatePage() {
           </Link>
         </div>
 
-        {/* <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 10,
-            borderRadius: 999,
-            padding: "9px 14px",
-            background: "rgba(255,255,255,0.12)",
-            border: "1px solid rgba(255,255,255,0.18)",
-            fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: "1.5px",
-            textTransform: "uppercase",
-            color: "#0369A1",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-          }}
-        >
-          Event Setup
-        </div> */}
-
         <div
           style={{
             marginTop: 16,
