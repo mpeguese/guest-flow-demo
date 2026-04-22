@@ -13,7 +13,7 @@ import {
   type ChangeEvent,
   type RefObject,
 } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 type EventMode = "tickets" | "locations" | "both"
 type EventType = "single" | "series"
@@ -82,6 +82,24 @@ type EventDraftRecord = {
       activeEnd: string
     }>
   }
+}
+
+type EventEditRow = {
+  id: string
+  venue_id: string
+  title: string | null
+  slug: string | null
+  description: string | null
+  start_at: string | null
+  end_at: string | null
+  status: string | null
+  flyer_image_url: string | null
+  cover_image_url: string | null
+  video_url: string | null
+  event_type: string | null
+  is_series: boolean | null
+  booking_type: string | null
+  timezone: string | null
 }
 
 function ImageIcon() {
@@ -1927,12 +1945,38 @@ function getFileExtension(name: string) {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : ""
 }
 
+function toLocalDateInput(value: string | null | undefined) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`
+}
+
+function toLocalTimeInput(value: string | null | undefined) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(
+    2,
+    "0"
+  )}`
+}
+
 export default function AdminSignupEventCreatePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
+
+  const eventId = (searchParams.get("eventId") || "").trim()
+  const isEditMode = Boolean(eventId)
 
   const [isMobile, setIsMobile] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [loadingExistingEvent, setLoadingExistingEvent] = useState(false)
+  const [existingSlug, setExistingSlug] = useState("")
+  const [eventVenueId, setEventVenueId] = useState("")
 
   const [eventTitle, setEventTitle] = useState("")
   const [eventDate, setEventDate] = useState("")
@@ -1993,6 +2037,103 @@ export default function AdminSignupEventCreatePage() {
   setMounted(true)
 }, [])
 
+  useEffect(() => {
+  if (!mounted || !isEditMode || !eventId) return
+
+  let active = true
+
+  async function loadExistingEvent() {
+    setLoadingExistingEvent(true)
+    setSubmitError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select(
+          "id, venue_id, title, slug, description, start_at, end_at, status, flyer_image_url, cover_image_url, video_url, event_type, is_series, booking_type, timezone"
+        )
+        .eq("id", eventId)
+        .single()
+
+      if (!active) return
+
+      if (error || !data) {
+        throw new Error(error?.message || "Could not load event.")
+      }
+
+      const eventRow = data as EventEditRow
+
+        setEventVenueId(eventRow.venue_id || "")
+
+        const { data: venueRow, error: venueError } = await supabase
+        .from("venues")
+        .select("name")
+        .eq("id", eventRow.venue_id)
+        .single()
+
+        if (!active) return
+
+        if (!venueError) {
+        setLocation(venueRow?.name || "")
+        }
+
+        setExistingSlug(eventRow.slug || "")
+        setEventTitle(eventRow.title || "")
+        setDescription(eventRow.description || "")
+        setEventType(eventRow.is_series ? "series" : "single")
+
+        const nextBookingType =
+        eventRow.booking_type === "tickets" ||
+        eventRow.booking_type === "locations" ||
+        eventRow.booking_type === "both"
+            ? (eventRow.booking_type as EventMode)
+            : "both"
+
+        setEventMode(nextBookingType)
+
+      //setEventMode((eventRow.booking_type as EventMode) || "both")
+
+      const nextDate = toLocalDateInput(eventRow.start_at)
+      const nextEndDate = toLocalDateInput(eventRow.end_at)
+      const nextStartTime = toLocalTimeInput(eventRow.start_at)
+      const nextEndTime = toLocalTimeInput(eventRow.end_at)
+
+      setEventDate(nextDate)
+      setEventEndDate(nextEndDate || nextDate)
+      setStartTime(nextStartTime)
+      setEndTime(nextEndTime)
+
+      setFlyerPreviewUrl(eventRow.flyer_image_url || eventRow.cover_image_url || "")
+      setVideoPreviewUrl(eventRow.video_url || "")
+
+      if (eventRow.flyer_image_url || eventRow.cover_image_url) {
+        const url = eventRow.flyer_image_url || eventRow.cover_image_url || ""
+        const lastPart = url.split("/").pop() || ""
+        setFlyerName(lastPart)
+      }
+
+      if (eventRow.video_url) {
+        const lastPart = eventRow.video_url.split("/").pop() || ""
+        setVideoName(lastPart)
+      }
+    } catch (error) {
+      if (!active) return
+      setSubmitError(
+        error instanceof Error ? error.message : "Could not load event for editing."
+      )
+    } finally {
+      if (active) {
+        setLoadingExistingEvent(false)
+      }
+    }
+  }
+
+  void loadExistingEvent()
+
+  return () => {
+    active = false
+  }
+}, [mounted, isEditMode, eventId, supabase])
 
 
   const descriptionRemaining = 750 - description.length
@@ -2045,10 +2186,10 @@ export default function AdminSignupEventCreatePage() {
   const basicValid =
     eventTitle.trim() &&
     description.trim() &&
-    location.trim() &&
     eventDate &&
     startTime &&
-    endTime
+    endTime &&
+    (isEditMode ? true : location.trim())
 
   const seriesValid =
     eventType === "single" ||
@@ -2057,7 +2198,11 @@ export default function AdminSignupEventCreatePage() {
       : Boolean(seriesEndDate))
 
   if (!basicValid || !seriesValid) {
-    setSubmitError("Please complete the required event fields before continuing.")
+    setSubmitError(
+      isEditMode
+          ? "Please complete the required event fields before saving."
+          : "Please complete the required event fields before continuing."
+      )
     return
   }
 
@@ -2083,46 +2228,78 @@ export default function AdminSignupEventCreatePage() {
     }
 
     if (!user) {
-      throw new Error("You must be signed in to create an event.")
+      throw new Error("You must be signed in to create or edit an event.")
     }
 
     const venueContext = await resolveActiveVenueContext(supabase, user.id)
-    const slug = await ensureEventSlug(supabase, eventTitle.trim())
 
-    const { data: insertedEvent, error: insertError } = await supabase
-      .from("events")
-      .insert({
-        venue_id: venueContext.venueId,
-        title: eventTitle.trim(),
-        slug,
-        description: description.trim(),
-        start_at: startAt,
-        end_at: endAt,
-        status: "draft",
-        flyer_image_url: null,
-        cover_image_url: null,
-        video_url: null,
-        event_type: eventType,
-        is_series: eventType === "series",
-        booking_type: eventMode,
-        timezone: venueContext.timezone || "America/New_York",
-        created_by: user.id,
-      })
-      .select("id")
-      .single()
+    let resolvedEventId = eventId
+    let resolvedSlug = existingSlug
+    let flyerImageUrl: string | null = flyerPreviewUrl || null
+    let videoUrl: string | null = videoPreviewUrl || null
 
-    if (insertError || !insertedEvent?.id) {
-      throw new Error(insertError?.message || "Could not create the event.")
+    if (!isEditMode) {
+      resolvedSlug = await ensureEventSlug(supabase, eventTitle.trim())
+
+      const { data: insertedEvent, error: insertError } = await supabase
+        .from("events")
+        .insert({
+          venue_id: venueContext.venueId,
+          title: eventTitle.trim(),
+          slug: resolvedSlug,
+          description: description.trim(),
+          start_at: startAt,
+          end_at: endAt,
+          status: "draft",
+          flyer_image_url: null,
+          cover_image_url: null,
+          video_url: null,
+          event_type: eventType,
+          is_series: eventType === "series",
+          booking_type: eventMode,
+          timezone: venueContext.timezone || "America/New_York",
+          created_by: user.id,
+        })
+        .select("id")
+        .single()
+
+      if (insertError || !insertedEvent?.id) {
+        throw new Error(insertError?.message || "Could not create the event.")
+      }
+
+      resolvedEventId = insertedEvent.id
+    } else {
+      if (!resolvedEventId) {
+        throw new Error("Missing event id for edit mode.")
+      }
+
+      const { error: updateEventError } = await supabase
+        .from("events")
+        .update({
+          title: eventTitle.trim(),
+          description: description.trim(),
+          start_at: startAt,
+          end_at: endAt,
+          event_type: eventType,
+          is_series: eventType === "series",
+          booking_type: eventMode,
+          timezone: venueContext.timezone || "America/New_York",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", resolvedEventId)
+
+      if (updateEventError) {
+        throw new Error(updateEventError.message || "Could not update the event.")
+      }
     }
 
-    const eventId = insertedEvent.id
-
-    let flyerImageUrl: string | null = null
-    let videoUrl: string | null = null
+    if (!resolvedSlug) {
+      throw new Error("Missing event slug.")
+    }
 
     if (flyerFile) {
       const flyerExt = getFileExtension(flyerFile.name) || "jpg"
-      const flyerPath = `${slug}/flyer/flyer.${flyerExt}`
+      const flyerPath = `${resolvedSlug}/flyer/flyer.${flyerExt}`
 
       const { error: flyerUploadError } = await supabase.storage
         .from("event-assets")
@@ -2144,7 +2321,7 @@ export default function AdminSignupEventCreatePage() {
 
     if (videoFile) {
       const videoExt = getFileExtension(videoFile.name) || "mp4"
-      const videoPath = `${slug}/video/video.${videoExt}`
+      const videoPath = `${resolvedSlug}/video/video.${videoExt}`
 
       const { error: videoUploadError } = await supabase.storage
         .from("event-assets")
@@ -2164,32 +2341,26 @@ export default function AdminSignupEventCreatePage() {
       videoUrl = videoPublic.publicUrl
     }
 
-    const updatePayload: Record<string, string | null> = {}
-
-    if (flyerImageUrl) {
-      updatePayload.flyer_image_url = flyerImageUrl
-      updatePayload.cover_image_url = flyerImageUrl
+    const mediaUpdatePayload: Record<string, string | null> = {
+      flyer_image_url: flyerImageUrl,
+      cover_image_url: flyerImageUrl,
+      video_url: videoUrl,
+      updated_at: new Date().toISOString(),
     }
 
-    if (videoUrl) {
-      updatePayload.video_url = videoUrl
-    }
+    const { error: mediaUpdateError } = await supabase
+      .from("events")
+      .update(mediaUpdatePayload)
+      .eq("id", resolvedEventId)
 
-    if (Object.keys(updatePayload).length > 0) {
-      const { error: updateError } = await supabase
-        .from("events")
-        .update(updatePayload)
-        .eq("id", eventId)
-
-      if (updateError) {
-        throw new Error(`Could not update event media: ${updateError.message}`)
-      }
+    if (mediaUpdateError) {
+      throw new Error(`Could not update event media: ${mediaUpdateError.message}`)
     }
 
     const now = new Date().toISOString()
 
     const draftRecord: EventDraftRecord = {
-      id: eventId,
+      id: resolvedEventId,
       status: "draft",
       createdAt: now,
       updatedAt: now,
@@ -2203,7 +2374,7 @@ export default function AdminSignupEventCreatePage() {
         startTime,
         endTime,
         description: description.trim(),
-        location: venueContext.venueName || location.trim(),
+        location: location.trim(),
         flyerName,
         flyerPreviewUrl: flyerImageUrl || flyerPreviewUrl,
         videoName,
@@ -2222,12 +2393,18 @@ export default function AdminSignupEventCreatePage() {
     }
 
     saveDraftToStorage(draftRecord)
-    router.push(`/admin/signup/event/create/${eventId}/details`)
+
+    if (isEditMode) {
+      router.push(`/admin/signup/event/create/${resolvedEventId}/details`)
+      return
+    }
+
+    router.push(`/admin/signup/event/create/${resolvedEventId}/details`)
   } catch (error) {
     setSubmitError(
       error instanceof Error
         ? error.message
-        : "Something went wrong while creating the event."
+        : `Something went wrong while ${isEditMode ? "saving" : "creating"} the event.`
     )
   } finally {
     setSubmitting(false)
@@ -2331,7 +2508,11 @@ export default function AdminSignupEventCreatePage() {
           </div>
 
           <Link
-            href="/admin/signup?intent=event"
+            href={
+              isEditMode && eventVenueId
+              ? `/admin/dashboard?venueId=${eventVenueId}`
+              : "/admin/signup?intent=event"
+            }
             style={{
               fontSize: 14,
               fontWeight: 800,
@@ -2354,7 +2535,7 @@ export default function AdminSignupEventCreatePage() {
             maxWidth: 640,
           }}
         >
-          Create your first event
+          {isEditMode ? "Edit event" : "Create your first event"}
         </div>
 
         <div
@@ -2366,7 +2547,9 @@ export default function AdminSignupEventCreatePage() {
             maxWidth: 620,
           }}
         >
-          Start with the media, details, booking style, and event cadence.
+          {isEditMode
+            ? "Update the media, details, booking style, and event cadence."
+            : "Start with the media, details, booking style, and event cadence."}
         </div>
 
         <div
@@ -2814,7 +2997,11 @@ export default function AdminSignupEventCreatePage() {
               }}
             >
               <Link
-                href="/admin/signup?intent=event"
+                href={
+                    isEditMode && eventVenueId
+                    ? `/admin/dashboard?venueId=${eventVenueId}`
+                    : "/admin/signup?intent=event"
+                }
                 style={{
                   flex: 1,
                   height: 48,
@@ -2854,7 +3041,13 @@ export default function AdminSignupEventCreatePage() {
                 onClick={handleContinue}
                 disabled={submitting}
               >
-                {submitting ? "Saving..." : "Continue"}
+                {submitting
+                    ? isEditMode
+                        ? "Saving..."
+                        : "Creating..."
+                    : isEditMode
+                        ? "Save Changes"
+                        : "Continue"}
               </button>
 
               <Link

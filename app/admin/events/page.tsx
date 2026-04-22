@@ -1,206 +1,139 @@
 //app/admin/events/page.tsx
 "use client"
 
-import { useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { createClient } from "@/app/lib/supabase/client"
 
-type EventStatus = "Draft" | "Published" | "Cancelled"
-type EventKind = "Series" | "Standalone Event"
-type MediaType = "image" | "video" | ""
-type DateMode = "single" | "range"
-type RepeatUnit = "day" | "week" | "month"
-type Weekday = "Su" | "M" | "T" | "W" | "Th" | "F" | "S"
+type EventStatusFilter = "All" | "draft" | "live" | "scheduled" | "ended" | "cancelled" | "active"
+
+type VenueRecord = {
+  id: string
+  name: string | null
+  city: string | null
+  state: string | null
+  description: string | null
+  active_status: string | null
+}
 
 type EventRecord = {
   id: string
-  title: string
-  dateMode: DateMode
-  eventDate: string
-  rangeStartDate: string
-  rangeEndDate: string
-  startTime: string
-  endTime: string
-  kind: EventKind
-  repeatEveryValue: string
-  repeatUnit: RepeatUnit
-  repeatDays: Weekday[]
-  location: string
-  description: string
-  mediaType: MediaType
-  mediaName: string
-  mediaPreviewUrl: string
-  allowDateChange: boolean
-  allowReservations: boolean
-  allowPasses: boolean
-  status: EventStatus
+  venue_id: string
+  title: string | null
+  slug: string | null
+  description: string | null
+  start_at: string | null
+  end_at: string | null
+  status: string | null
+  event_type: string | null
+  is_series: boolean | null
+  booking_type: string | null
+  flyer_image_url: string | null
+  cover_image_url: string | null
+  video_url: string | null
+  timezone: string | null
+  created_at?: string | null
 }
 
-type EventForm = EventRecord
-
-const pageBackground =
-  "linear-gradient(180deg, #FFFFFF 0%, #F7FBFC 54%, #FFF4E5 100%)"
-
-const elevatedBackground =
-  "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,250,255,0.98) 100%)"
-
-const elevatedShadow = "0 -24px 60px rgba(15,23,42,0.18)"
-
-const textPrimary = "#0F172A"
-const textSecondary = "#526077"
-const labelText = "#64748B"
-const borderColor = "rgba(148,163,184,0.16)"
-const aqua = "#17CFCF"
-const sky = "#53A7FF"
-const coral = "#FF8D7A"
-const peach = "#FFD7C7"
-const success = "#10B981"
-
-const locationOptions = [
-  "LIV Tampa",
-  "Sky Lounge",
-  "Main Floor",
-  "Rooftop",
-  "Tangra",
-]
-
-const weekdayOptions: Weekday[] = ["Su", "M", "T", "W", "Th", "F", "S"]
-
-const timeOptions = buildTimeOptions()
-const defaultPreview = "/images/tangra-interior.jpg"
-
-const initialEvents: EventRecord[] = [
-  {
-    id: "e1",
-    title: "Rooftop Fridays",
-    dateMode: "single",
-    eventDate: "2026-04-30",
-    rangeStartDate: "",
-    rangeEndDate: "",
-    startTime: "9:00 PM",
-    endTime: "2:00 AM",
-    kind: "Series",
-    repeatEveryValue: "1",
-    repeatUnit: "month",
-    repeatDays: ["F"],
-    location: "Rooftop",
-    description:
-      "Monthly rooftop experience with premium table reservations and passes.",
-    mediaType: "image",
-    mediaName: "tangra-interior.jpg",
-    mediaPreviewUrl: defaultPreview,
-    allowDateChange: false,
-    allowReservations: true,
-    allowPasses: true,
-    status: "Published",
-  },
-  {
-    id: "e2",
-    title: "Latin Nights",
-    dateMode: "range",
-    eventDate: "",
-    rangeStartDate: "2026-05-29",
-    rangeEndDate: "2026-05-31",
-    startTime: "10:00 PM",
-    endTime: "3:00 AM",
-    kind: "Series",
-    repeatEveryValue: "1",
-    repeatUnit: "week",
-    repeatDays: ["F"],
-    location: "Main Floor",
-    description:
-      "Recurring Latin night with live DJ programming and express entry options.",
-    mediaType: "video",
-    mediaName: "latin-nights-teaser.mp4",
-    mediaPreviewUrl: defaultPreview,
-    allowDateChange: false,
-    allowReservations: true,
-    allowPasses: true,
-    status: "Draft",
-  },
-  {
-    id: "e3",
-    title: "GuestFlow Summer Kickoff",
-    dateMode: "single",
-    eventDate: "2026-06-15",
-    rangeStartDate: "",
-    rangeEndDate: "",
-    startTime: "8:00 PM",
-    endTime: "1:00 AM",
-    kind: "Standalone Event",
-    repeatEveryValue: "1",
-    repeatUnit: "month",
-    repeatDays: [],
-    location: "Tangra",
-    description: "Standalone seasonal launch party with limited VIP sections.",
-    mediaType: "image",
-    mediaName: "summer-kickoff-cover.png",
-    mediaPreviewUrl: defaultPreview,
-    allowDateChange: false,
-    allowReservations: true,
-    allowPasses: false,
-    status: "Cancelled",
-  },
-]
-
-const emptyForm: EventForm = {
-  id: "",
-  title: "",
-  dateMode: "single",
-  eventDate: "",
-  rangeStartDate: "",
-  rangeEndDate: "",
-  startTime: "9:00 PM",
-  endTime: "2:00 AM",
-  kind: "Standalone Event",
-  repeatEveryValue: "1",
-  repeatUnit: "month",
-  repeatDays: [],
-  location: "",
-  description: "",
-  mediaType: "",
-  mediaName: "",
-  mediaPreviewUrl: defaultPreview,
-  allowDateChange: false,
-  allowReservations: true,
-  allowPasses: true,
-  status: "Draft",
+type ProfileRecord = {
+  id: string
+  role: string | null
+  is_active: boolean | null
+  first_name?: string | null
+  last_name?: string | null
 }
 
-function buildTimeOptions() {
-  const values: string[] = []
-  for (let hour = 0; hour < 24; hour++) {
-    for (const minute of [0, 30]) {
-      const suffix = hour >= 12 ? "PM" : "AM"
-      const hour12 = hour % 12 === 0 ? 12 : hour % 12
-      const minuteLabel = minute === 0 ? "00" : "30"
-      values.push(`${hour12}:${minuteLabel} ${suffix}`)
+function formatDateLabel(value: string | null) {
+  if (!value) return "No date"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "No date"
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function formatTimeLabel(value: string | null) {
+  if (!value) return "TBD"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "TBD"
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function getStatusTone(status: string | null) {
+  const normalized = (status || "").toLowerCase()
+
+  if (normalized === "live" || normalized === "active") {
+    return {
+      label: normalized === "active" ? "active" : "live",
+      bg: "rgba(15,118,110,0.10)",
+      color: "#0f766e",
+      border: "1px solid rgba(15,118,110,0.16)",
     }
   }
-  return values
-}
 
-function formatDateUS(input: string) {
-  if (!input) return "Not set"
-  const [y, m, d] = input.split("-")
-  if (!y || !m || !d) return input
-  return `${m}-${d}-${y}`
-}
-
-function formatDateLabel(event: EventRecord) {
-  if (event.dateMode === "range" && event.rangeStartDate && event.rangeEndDate) {
-    return `${formatDateUS(event.rangeStartDate)} - ${formatDateUS(event.rangeEndDate)}`
+  if (normalized === "draft") {
+    return {
+      label: "draft",
+      bg: "rgba(83,167,255,0.10)",
+      color: "#2563eb",
+      border: "1px solid rgba(83,167,255,0.16)",
+    }
   }
-  return formatDateUS(event.eventDate)
+
+  if (normalized === "scheduled") {
+    return {
+      label: "scheduled",
+      bg: "rgba(168,85,247,0.10)",
+      color: "#7c3aed",
+      border: "1px solid rgba(168,85,247,0.16)",
+    }
+  }
+
+  if (normalized === "ended") {
+    return {
+      label: "ended",
+      bg: "rgba(148,163,184,0.10)",
+      color: "#64748b",
+      border: "1px solid rgba(148,163,184,0.14)",
+    }
+  }
+
+  if (normalized === "cancelled") {
+    return {
+      label: "cancelled",
+      bg: "rgba(255,141,122,0.14)",
+      color: "#d9644a",
+      border: "1px solid rgba(255,141,122,0.18)",
+    }
+  }
+
+  return {
+    label: normalized || "unknown",
+    bg: "rgba(148,163,184,0.10)",
+    color: "#64748b",
+    border: "1px solid rgba(148,163,184,0.14)",
+  }
 }
 
-function TopButton({
+function getKindLabel(event: EventRecord) {
+  if (event.is_series) return "Series"
+  if ((event.event_type || "").toLowerCase() === "series") return "Series"
+  return "Single"
+}
+
+function FilterPill({
   label,
-  active = false,
+  active,
   onClick,
 }: {
   label: string
-  active?: boolean
-  onClick?: () => void
+  active: boolean
+  onClick: () => void
 }) {
   return (
     <button
@@ -208,15 +141,17 @@ function TopButton({
       onClick={onClick}
       style={{
         appearance: "none",
-        border: `1px solid ${active ? "rgba(83,167,255,0.28)" : borderColor}`,
-        background: elevatedBackground,
-        boxShadow: elevatedShadow,
+        border: active
+          ? "1px solid rgba(15,118,110,0.18)"
+          : "1px solid rgba(255,255,255,0.20)",
+        background: active ? "rgba(15,118,110,0.08)" : "rgba(255,255,255,0.72)",
+        color: active ? "#0f766e" : "#475569",
         borderRadius: 999,
-        padding: "12px 16px",
-        color: active ? textPrimary : textSecondary,
+        padding: "10px 14px",
         fontWeight: 800,
-        fontSize: 14,
+        fontSize: 13,
         cursor: "pointer",
+        boxShadow: active ? "0 8px 18px rgba(15,23,42,0.04)" : "none",
       }}
     >
       {label}
@@ -224,25 +159,87 @@ function TopButton({
   )
 }
 
-function SectionCard({
-  title,
-  subtitle,
-  children,
-  rightContent,
+function SnapshotCard({
+  label,
+  value,
+  helper,
 }: {
-  title: string
-  subtitle?: string
-  children: React.ReactNode
-  rightContent?: React.ReactNode
+  label: string
+  value: string
+  helper: string
 }) {
   return (
     <div
       style={{
-        background: elevatedBackground,
-        boxShadow: elevatedShadow,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 28,
-        padding: 24,
+        borderRadius: 26,
+        border: "1px solid rgba(255,255,255,0.22)",
+        background: "rgba(255,255,255,0.10)",
+        backdropFilter: "blur(22px)",
+        WebkitBackdropFilter: "blur(22px)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.42), 0 18px 34px rgba(15,23,42,0.06)",
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          color: "#64748B",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 34,
+          lineHeight: 1,
+          fontWeight: 900,
+          letterSpacing: -1.2,
+          color: "#020617",
+        }}
+      >
+        {value}
+      </div>
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 14,
+          lineHeight: 1.55,
+          color: "#64748B",
+        }}
+      >
+        {helper}
+      </div>
+    </div>
+  )
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  rightContent,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  rightContent?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 30,
+        border: "1px solid rgba(255,255,255,0.24)",
+        background: "rgba(255,255,255,0.12)",
+        backdropFilter: "blur(28px)",
+        WebkitBackdropFilter: "blur(28px)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.46), 0 18px 40px rgba(15,23,42,0.06)",
+        padding: 22,
       }}
     >
       <div
@@ -251,8 +248,8 @@ function SectionCard({
           alignItems: "flex-start",
           justifyContent: "space-between",
           gap: 16,
-          marginBottom: 20,
           flexWrap: "wrap",
+          marginBottom: 18,
         }}
       >
         <div>
@@ -260,8 +257,8 @@ function SectionCard({
             style={{
               fontSize: 20,
               fontWeight: 900,
-              color: textPrimary,
-              marginBottom: 4,
+              letterSpacing: -0.4,
+              color: "#020617",
             }}
           >
             {title}
@@ -269,9 +266,11 @@ function SectionCard({
           {subtitle ? (
             <div
               style={{
+                marginTop: 6,
                 fontSize: 14,
-                color: textSecondary,
-                lineHeight: 1.45,
+                lineHeight: 1.5,
+                color: "#64748B",
+                maxWidth: 640,
               }}
             >
               {subtitle}
@@ -285,404 +284,63 @@ function SectionCard({
   )
 }
 
-function KpiCard({
-  label,
-  value,
-  helper,
-}: {
-  label: string
-  value: string
-  helper: string
-}) {
-  return (
-    <div
-      style={{
-        background: elevatedBackground,
-        boxShadow: elevatedShadow,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 24,
-        padding: 20,
-        minHeight: 120,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 800,
-          letterSpacing: 0.9,
-          textTransform: "uppercase",
-          color: labelText,
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 32,
-          lineHeight: 1.05,
-          fontWeight: 900,
-          color: textPrimary,
-          marginBottom: 10,
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          color: textSecondary,
-          fontWeight: 700,
-          lineHeight: 1.45,
-        }}
-      >
-        {helper}
-      </div>
-    </div>
-  )
-}
-
-function Toggle({
-  checked,
-  label,
-  onToggle,
-}: {
-  checked: boolean
-  label: string
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      style={{
-        appearance: "none",
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "14px 16px",
-        borderRadius: 18,
-        border: `1px solid ${checked ? "rgba(83,167,255,0.24)" : borderColor}`,
-        background: checked ? "rgba(83,167,255,0.08)" : "rgba(255,255,255,0.82)",
-        cursor: "pointer",
-      }}
-    >
-      <div
-        style={{
-          textAlign: "left",
-          fontSize: 14,
-          fontWeight: 800,
-          color: textPrimary,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          width: 46,
-          height: 26,
-          borderRadius: 999,
-          background: checked ? sky : "#D6E3EA",
-          position: "relative",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 3,
-            left: checked ? 23 : 3,
-            width: 20,
-            height: 20,
-            borderRadius: 999,
-            background: "#FFFFFF",
-            boxShadow: "0 4px 10px rgba(15,23,42,0.18)",
-          }}
-        />
-      </div>
-    </button>
-  )
-}
-
-function StatusBadge({ status }: { status: EventStatus }) {
-  const map = {
-    Draft: { bg: "rgba(83,167,255,0.14)", color: "#2563EB" },
-    Published: { bg: "rgba(16,185,129,0.14)", color: "#059669" },
-    Cancelled: { bg: "rgba(255,141,122,0.16)", color: "#D9644A" },
-  } as const
-
-  const token = map[status]
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "8px 12px",
-        borderRadius: 999,
-        background: token.bg,
-        color: token.color,
-        fontSize: 12,
-        fontWeight: 900,
-      }}
-    >
-      {status}
-    </span>
-  )
-}
-
-function KindBadge({ kind }: { kind: EventKind }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "8px 12px",
-        borderRadius: 999,
-        background:
-          kind === "Series" ? "rgba(23,207,207,0.14)" : "rgba(255,215,199,0.70)",
-        color: kind === "Series" ? "#0E9F9F" : "#B45309",
-        fontSize: 12,
-        fontWeight: 900,
-      }}
-    >
-      {kind}
-    </span>
-  )
-}
-
-function MetaPill({
-  label,
-  tone = "neutral",
-}: {
-  label: string
-  tone?: "neutral" | "aqua" | "sky" | "coral"
-}) {
-  const styleMap = {
-    neutral: {
-      background: "rgba(255,255,255,0.78)",
-      color: textSecondary,
-      border: `1px solid ${borderColor}`,
-    },
-    aqua: {
-      background: "rgba(23,207,207,0.12)",
-      color: "#0E9F9F",
-      border: "1px solid rgba(23,207,207,0.18)",
-    },
-    sky: {
-      background: "rgba(83,167,255,0.12)",
-      color: "#2563EB",
-      border: "1px solid rgba(83,167,255,0.18)",
-    },
-    coral: {
-      background: "rgba(255,141,122,0.14)",
-      color: "#D9644A",
-      border: "1px solid rgba(255,141,122,0.18)",
-    },
-  } as const
-
-  const token = styleMap[tone]
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "8px 10px",
-        borderRadius: 999,
-        background: token.background,
-        color: token.color,
-        border: token.border,
-        fontSize: 12,
-        fontWeight: 800,
-      }}
-    >
-      {label}
-    </span>
-  )
-}
-
-function ActionPill({
-  label,
-  active,
-  onClick,
-  danger = false,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-  danger?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        appearance: "none",
-        border: `1px solid ${
-          active
-            ? danger
-              ? "rgba(255,141,122,0.24)"
-              : "rgba(83,167,255,0.24)"
-            : borderColor
-        }`,
-        background: active
-          ? danger
-            ? "rgba(255,141,122,0.12)"
-            : "rgba(83,167,255,0.10)"
-          : "rgba(255,255,255,0.82)",
-        color: active ? (danger ? "#D9644A" : "#2563EB") : textSecondary,
-        borderRadius: 999,
-        padding: "10px 14px",
-        fontWeight: 800,
-        fontSize: 13,
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  )
-}
-
-function SegmentedControl<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T
-  options: { value: T; label: string }[]
-  onChange: (value: T) => void
-}) {
-  return (
-    <div
-      style={{
-        display: "inline-grid",
-        gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
-        gap: 6,
-        padding: 6,
-        borderRadius: 18,
-        background: "rgba(241,245,249,0.95)",
-        border: `1px solid ${borderColor}`,
-        width: "100%",
-      }}
-    >
-      {options.map((option) => {
-        const active = value === option.value
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            style={{
-              appearance: "none",
-              border: "none",
-              borderRadius: 14,
-              padding: "11px 14px",
-              background: active
-                ? "linear-gradient(90deg, rgba(23,207,207,0.16) 0%, rgba(83,167,255,0.18) 100%)"
-                : "transparent",
-              color: active ? textPrimary : textSecondary,
-              fontWeight: 900,
-              fontSize: 14,
-              cursor: "pointer",
-              boxShadow: active ? "0 8px 20px rgba(15,23,42,0.07)" : "none",
-            }}
-          >
-            {option.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function ImageGlyph() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
-      <circle cx="8.5" cy="9" r="1.4" />
-      <path d="M20.5 15.2 15 10.5l-4.2 3.9-2.3-2-5 4.1" />
-    </svg>
-  )
-}
-
-function VideoGlyph() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3.5" y="5" width="13.5" height="14" rx="3" />
-      <path d="m17 10 3.8-2.2a.7.7 0 0 1 1 .6v7.2a.7.7 0 0 1-1 .6L17 14" />
-      <path d="m9.2 9.3 4 2.7-4 2.7V9.3Z" />
-    </svg>
-  )
-}
-
 function EventCard({
   event,
   onEdit,
-  onStatusChange,
+  onCopyLink,
+  copiedLink,
+  isNarrow,
 }: {
   event: EventRecord
-  onEdit: (event: EventRecord) => void
-  onStatusChange: (id: string, status: EventStatus) => void
+  onEdit: (eventId: string) => void
+  onCopyLink: (value: string) => void
+  copiedLink: string
+  isNarrow: boolean
 }) {
+  const tone = getStatusTone(event.status)
+  const previewUrl =
+    event.flyer_image_url || event.cover_image_url || "/images/tangra-interior.jpg"
+
+  const publicLink = event.slug ? buildPublicEventLink(event.slug) : ""
+  const scheduleLabel = `${formatDateLabel(event.start_at)} · ${formatTimeLabel(
+    event.start_at
+  )} - ${formatTimeLabel(event.end_at)}`
+
   return (
     <div
       style={{
-        border: `1px solid ${borderColor}`,
-        borderRadius: 22,
-        padding: 18,
-        background: "rgba(255,255,255,0.78)",
+        position: "relative",
+        borderRadius: 28,
+        border: "1px solid rgba(255,255,255,0.22)",
+        background: "rgba(255,255,255,0.14)",
+        backdropFilter: "blur(26px)",
+        WebkitBackdropFilter: "blur(26px)",
+        padding: "18px 18px 28px",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.42), 0 14px 30px rgba(15,23,42,0.05)",
       }}
     >
       <div
-        className="gf-event-card-head"
         style={{
           display: "grid",
-          gridTemplateColumns: "124px 1fr",
-          gap: 14,
-          marginBottom: 14,
+          gridTemplateColumns: isNarrow ? "1fr" : "190px minmax(0, 1fr)",
+          gap: 16,
+          alignItems: "stretch",
         }}
       >
         <div
           style={{
             width: "100%",
-            height: 110,
-            borderRadius: 18,
+            height: isNarrow ? 220 : 160,
+            borderRadius: 22,
             overflow: "hidden",
-            border: `1px solid ${borderColor}`,
-            background: "#F8FAFC",
+            border: "1px solid rgba(255,255,255,0.20)",
+            background: "rgba(255,255,255,0.70)",
           }}
         >
           <img
-            src={event.mediaPreviewUrl || defaultPreview}
-            alt={event.title}
+            src={previewUrl}
+            alt={event.title || "Event preview"}
             style={{
               width: "100%",
               height: "100%",
@@ -694,228 +352,194 @@ function EventCard({
 
         <div
           style={{
+            minWidth: 0,
             display: "flex",
-            justifyContent: "space-between",
-            gap: 14,
-            alignItems: "flex-start",
-            flexWrap: "wrap",
+            flexDirection: "column",
+            gap: 12,
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 900,
+                  color: "#0F172A",
+                  lineHeight: 1.1,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {event.title || "Untitled Event"}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#526077",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {event.description?.trim()
+                  ? event.description
+                  : "No description added yet."}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onEdit(event.id)}
+              style={{
+                appearance: "none",
+                border: "1px solid rgba(148,163,184,0.16)",
+                background: "rgba(255,255,255,0.82)",
+                color: "#0F172A",
+                borderRadius: 999,
+                padding: "10px 14px",
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                boxShadow: "0 8px 18px rgba(15,23,42,0.04)",
+              }}
+            >
+              Edit Event
+            </button>
+          </div>
+
           <div style={{ minWidth: 0 }}>
             <div
               style={{
-                fontSize: 18,
-                fontWeight: 900,
-                color: textPrimary,
-                marginBottom: 8,
-                lineHeight: 1.15,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                color: "#64748B",
+                marginBottom: 6,
               }}
             >
-              {event.kind === "Series" && event.eventDate
-                ? `${event.title} — ${formatDateUS(event.eventDate)}`
-                : event.kind === "Series" &&
-                  event.rangeStartDate &&
-                  event.rangeEndDate
-                ? `${event.title} — ${formatDateUS(event.rangeStartDate)}`
-                : event.title}
+              Schedule
             </div>
 
             <div
               style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
+                fontSize: 14,
+                fontWeight: 800,
+                color: "#0F172A",
+                lineHeight: 1.5,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
-              <KindBadge kind={event.kind} />
-              <StatusBadge status={event.status} />
+              {scheduleLabel}
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                color: "#64748B",
+                marginBottom: 6,
+              }}
+            >
+              Event Link
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: publicLink ? "minmax(0, 1fr) 36px" : "1fr",
+                gap: 10,
+                alignItems: "center",
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  minWidth: 0,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: "#0F172A",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+                title={publicLink || "Slug not available"}
+              >
+                {publicLink || "Slug not available"}
+              </div>
+
+              {publicLink ? (
+                <button
+                  type="button"
+                  onClick={() => onCopyLink(publicLink)}
+                  aria-label={copiedLink === publicLink ? "Copied" : "Copy event link"}
+                  title={copiedLink === publicLink ? "Copied" : "Copy link"}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 12,
+                    border: "1px solid rgba(56,189,248,0.18)",
+                    background:
+                      "linear-gradient(135deg, rgba(56,189,248,0.16) 0%, rgba(34,211,238,0.16) 100%)",
+                    color: "#0369a1",
+                    fontSize: 15,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {copiedLink === publicLink ? "✓" : <CopyIcon/>}
+                  
+                </button>
+              ) : null}
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => onEdit(event)}
-            style={{
-              appearance: "none",
-              border: `1px solid ${borderColor}`,
-              background: elevatedBackground,
-              borderRadius: 999,
-              padding: "10px 14px",
-              color: textPrimary,
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Edit Event
-          </button>
         </div>
       </div>
 
-      <div
-        className="gf-event-meta"
+      {/* <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 16,
+          position: "absolute",
+          right: 18,
+          bottom: 8,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 22,
+          padding: "0 2px",
+          background: "transparent",
+          color: tone.color,
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: 0.1,
+          textTransform: "lowercase",
+          whiteSpace: "nowrap",
         }}
       >
-        <div
-          style={{
-            borderRadius: 16,
-            padding: 12,
-            background: "rgba(255,255,255,0.82)",
-            border: `1px solid ${borderColor}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              color: labelText,
-              marginBottom: 6,
-            }}
-          >
-            Schedule
-          </div>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 900,
-              color: textPrimary,
-              marginBottom: 4,
-            }}
-          >
-            {formatDateLabel(event)}
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: textSecondary,
-              fontWeight: 700,
-            }}
-          >
-            {event.startTime} - {event.endTime}
-          </div>
-        </div>
-
-        <div
-          style={{
-            borderRadius: 16,
-            padding: 12,
-            background: "rgba(255,255,255,0.82)",
-            border: `1px solid ${borderColor}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              color: labelText,
-              marginBottom: 6,
-            }}
-          >
-            Location
-          </div>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 900,
-              color: textPrimary,
-              marginBottom: 4,
-            }}
-          >
-            {event.location || "Not set"}
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: textSecondary,
-              fontWeight: 700,
-            }}
-          >
-            {event.kind === "Series"
-              ? `Repeats every ${event.repeatEveryValue} ${event.repeatUnit}${Number(event.repeatEveryValue) > 1 ? "s" : ""}`
-              : "Standalone event"}
-          </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 14,
-          lineHeight: 1.55,
-          color: textSecondary,
-          marginBottom: 14,
-        }}
-      >
-        {event.description}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          marginBottom: 16,
-        }}
-      >
-        <MetaPill label={event.allowDateChange ? "Date Change Allowed" : "Date Locked"} tone="sky" />
-        <MetaPill label={event.allowReservations ? "Reservations On" : "Reservations Off"} tone="aqua" />
-        <MetaPill label={event.allowPasses ? "Passes On" : "Passes Off"} tone="coral" />
-        <MetaPill
-          label={event.mediaType ? `${event.mediaType === "image" ? "Image" : "Video"}` : "No Media"}
-          tone="neutral"
-        />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <ActionPill
-          label="Draft"
-          active={event.status === "Draft"}
-          onClick={() => onStatusChange(event.id, "Draft")}
-        />
-        <ActionPill
-          label="Publish"
-          active={event.status === "Published"}
-          onClick={() => onStatusChange(event.id, "Published")}
-        />
-        <ActionPill
-          label="Cancel"
-          active={event.status === "Cancelled"}
-          onClick={() => onStatusChange(event.id, "Cancelled")}
-          danger
-        />
-      </div>
-    </div>
-  )
-}
-
-function FieldLabel({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: 1,
-        textTransform: "uppercase",
-        color: labelText,
-        marginBottom: 8,
-      }}
-    >
-      {label}
+        {tone.label}
+      </div> */}
     </div>
   )
 }
@@ -953,9 +577,11 @@ function InfoBox({
     <div
       style={{
         padding: 14,
-        borderRadius: 18,
+        borderRadius: 20,
         border: `1px solid ${token.border}`,
-        background: token.bg,
+        background: "rgba(255,255,255,0.14)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
       }}
     >
       <div
@@ -972,7 +598,7 @@ function InfoBox({
         style={{
           fontSize: 14,
           lineHeight: 1.55,
-          color: textSecondary,
+          color: "#526077",
           fontWeight: 700,
         }}
       >
@@ -982,1064 +608,255 @@ function InfoBox({
   )
 }
 
-function WeekdayPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: Weekday
-  active: boolean
-  onClick: () => void
-}) {
+function CopyIcon() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        appearance: "none",
-        height: 46,
-        width: 46,
-        padding: "10px 12px",
-        borderRadius: 999,
-        border: `1px solid ${active ? "rgba(83,167,255,0.24)" : borderColor}`,
-        background: active ? "rgba(83,167,255,0.10)" : "rgba(255,255,255,0.82)",
-        color: active ? "#2563EB" : textSecondary,
-        fontSize: 13,
-        fontWeight: 800,
-        cursor: "pointer",
-      }}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      {label}
-    </button>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
   )
 }
 
-function LocationCombobox({
-  value,
-  options,
-  onChange,
-}: {
-  value: string
-  options: string[]
-  onChange: (value: string) => void
-}) {
-  const [open, setOpen] = useState(false)
+function getBaseSiteUrl() {
+  const envUrl =
+    typeof process !== "undefined" ? process.env.NEXT_PUBLIC_SITE_URL : ""
 
-  const filtered = useMemo(() => {
-    const q = value.trim().toLowerCase()
-    if (!q) return options
-    return options.filter((item) => item.toLowerCase().includes(q))
-  }, [options, value])
+  if (envUrl && envUrl.trim()) {
+    return envUrl.replace(/\/+$/, "")
+  }
 
-  return (
-    <div style={{ position: "relative" }}>
-      <input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          window.setTimeout(() => setOpen(false), 120)
-        }}
-        placeholder="Select or type a location"
-        style={inputStyle}
-      />
+  if (typeof window !== "undefined") {
+    return window.location.origin
+  }
 
-      {open ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            borderRadius: 18,
-            border: `1px solid ${borderColor}`,
-            background: "#FFFFFF",
-            boxShadow: "0 20px 40px rgba(15,23,42,0.10)",
-            overflow: "hidden",
-          }}
-        >
-          {filtered.length > 0 ? (
-            filtered.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => {
-                  onChange(item)
-                  setOpen(false)
-                }}
-                style={{
-                  appearance: "none",
-                  width: "100%",
-                  textAlign: "left",
-                  border: "none",
-                  background: "#FFFFFF",
-                  color: textPrimary,
-                  padding: "12px 14px",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  borderBottom: `1px solid ${borderColor}`,
-                }}
-              >
-                {item}
-              </button>
-            ))
-          ) : (
-            <div
-              style={{
-                padding: "12px 14px",
-                fontSize: 14,
-                color: textSecondary,
-                fontWeight: 700,
-              }}
-            >
-              Press enter or continue with your typed location.
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  )
+  return ""
 }
 
-function EventWizardModal({
-  open,
-  mode,
-  step,
-  form,
-  onClose,
-  onNext,
-  onBack,
-  onSave,
-  onChange,
-  onToggle,
-  onPickMediaType,
-  onSelectMediaFile,
-  onToggleRepeatDay,
-}: {
-  open: boolean
-  mode: "create" | "edit"
-  step: 1 | 2 | 3
-  form: EventForm
-  onClose: () => void
-  onNext: () => void
-  onBack: () => void
-  onSave: () => void
-  onChange: (field: keyof EventForm, value: string | boolean | Weekday[]) => void
-  onToggle: (field: "allowDateChange" | "allowReservations" | "allowPasses") => void
-  onPickMediaType: (type: "image" | "video") => void
-  onSelectMediaFile: (type: "image" | "video") => void
-  onToggleRepeatDay: (day: Weekday) => void
-}) {
-  if (!open) return null
-
-  const statusOptions: EventStatus[] = ["Draft", "Published", "Cancelled"]
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        background: "rgba(15,23,42,0.52)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: 820,
-          maxHeight: "92dvh",
-          borderRadius: 28,
-          overflow: "hidden",
-          background: elevatedBackground,
-          boxShadow: "0 28px 80px rgba(15,23,42,0.28)",
-          border: `1px solid ${borderColor}`,
-        }}
-      >
-        <div
-          style={{
-            maxHeight: "92dvh",
-            overflowY: "auto",
-            padding: 22,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 14,
-              alignItems: "flex-start",
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: 1.1,
-                  textTransform: "uppercase",
-                  color: labelText,
-                  marginBottom: 8,
-                }}
-              >
-                GuestFlow Admin
-              </div>
-              <div
-                style={{
-                  fontSize: 28,
-                  lineHeight: 1.08,
-                  fontWeight: 900,
-                  color: textPrimary,
-                }}
-              >
-                {mode === "create" ? "Create Event" : "Edit Event"}
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  color: textSecondary,
-                  maxWidth: 560,
-                }}
-              >
-                Grouped steps keep the flow polished and easier to use on mobile.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                appearance: "none",
-                border: `1px solid ${borderColor}`,
-                background: "rgba(255,255,255,0.9)",
-                borderRadius: 999,
-                width: 40,
-                height: 40,
-                color: textPrimary,
-                fontWeight: 900,
-                fontSize: 18,
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              ×
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 10,
-              marginBottom: 18,
-            }}
-          >
-            {[
-              { n: 1, label: "Media" },
-              { n: 2, label: "Series & Basics" },
-              { n: 3, label: "Rules & Publish" },
-            ].map((item) => {
-              const active = step === item.n
-              const done = step > (item.n as 1 | 2 | 3)
-
-              return (
-                <div
-                  key={item.n}
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 18,
-                    border: `1px solid ${
-                      active || done ? "rgba(83,167,255,0.24)" : borderColor
-                    }`,
-                    background:
-                      active || done
-                        ? "rgba(83,167,255,0.08)"
-                        : "rgba(255,255,255,0.82)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 900,
-                      letterSpacing: 1.1,
-                      textTransform: "uppercase",
-                      color: active || done ? "#2563EB" : labelText,
-                      marginBottom: 6,
-                    }}
-                  >
-                    Step {item.n}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 900,
-                      color: textPrimary,
-                    }}
-                  >
-                    {item.label}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {step === 1 ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div>
-                <FieldLabel label="Media Type" />
-                <SegmentedControl
-                  value={form.mediaType || "image"}
-                  options={[
-                    { value: "image", label: "Image" },
-                    { value: "video", label: "Short Video" },
-                  ]}
-                  onChange={(value) => onPickMediaType(value as "image" | "video")}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onSelectMediaFile((form.mediaType || "image") as "image" | "video")
-                }
-                style={{
-                  appearance: "none",
-                  width: "100%",
-                  textAlign: "left",
-                  border: `1px solid ${borderColor}`,
-                  background: "rgba(255,255,255,0.84)",
-                  borderRadius: 24,
-                  padding: 18,
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  className="gf-upload-tile"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "58px 1fr auto",
-                    gap: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 58,
-                      height: 58,
-                      borderRadius: 18,
-                      display: "grid",
-                      placeItems: "center",
-                      background:
-                        form.mediaType === "video"
-                          ? "rgba(255,141,122,0.12)"
-                          : "rgba(83,167,255,0.12)",
-                      color: form.mediaType === "video" ? coral : sky,
-                    }}
-                  >
-                    {form.mediaType === "video" ? <VideoGlyph /> : <ImageGlyph />}
-                  </div>
-
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 900,
-                        color: textPrimary,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {form.mediaType === "video"
-                        ? "Upload short video"
-                        : "Upload image"}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        lineHeight: 1.5,
-                        color: textSecondary,
-                      }}
-                    >
-                      Tap to open your device photo album or file browser.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 999,
-                      background: "rgba(83,167,255,0.10)",
-                      color: "#2563EB",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Choose File
-                  </div>
-                </div>
-              </button>
-
-              <div
-                className="gf-media-preview-wrap"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "160px 1fr",
-                  gap: 14,
-                  padding: 16,
-                  borderRadius: 20,
-                  border: `1px solid ${borderColor}`,
-                  background: "rgba(255,255,255,0.84)",
-                }}
-              >
-                <div
-                  style={{
-                    height: 118,
-                    borderRadius: 18,
-                    overflow: "hidden",
-                    border: `1px solid ${borderColor}`,
-                    background: "#F8FAFC",
-                  }}
-                >
-                  <img
-                    src={form.mediaPreviewUrl || defaultPreview}
-                    alt="Media preview"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel label="Selected Media" />
-                  <input
-                    value={form.mediaName}
-                    onChange={(e) => onChange("mediaName", e.target.value)}
-                    placeholder="Selected file name"
-                    style={inputStyle}
-                  />
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 13,
-                      color: textSecondary,
-                      lineHeight: 1.5,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {form.mediaType
-                      ? `Currently set as ${form.mediaType === "image" ? "image" : "video"}.`
-                      : "Choose image or short video to continue."}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                  <FieldLabel label="Event Name" />
-                  <input
-                    value={form.title}
-                    onChange={(e) => onChange("title", e.target.value)}
-                    placeholder="Enter event name"
-                    style={inputStyle}
-                  />
-                </div>
-              <div>
-                <FieldLabel label="Event Type" />
-                <SegmentedControl
-                  value={form.kind}
-                  options={[
-                    { value: "Standalone Event", label: "Standalone" },
-                    { value: "Series", label: "Series" }
-                  ]}
-                  onChange={(value) => onChange("kind", value)}
-                />
-              </div>
-
-              {form.kind === "Series" ? (
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 20,
-                    border: `1px solid ${borderColor}`,
-                    background: "rgba(255,255,255,0.84)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 800,
-                      color: textPrimary,
-                      marginBottom: 12,
-                    }}
-                  >
-                    This event name becomes the recurring series name.
-                  </div>
-
-                  <div
-                    className="gf-modal-two-col"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <FieldLabel label="Repeats Every" />
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "92px 1fr",
-                          gap: 10,
-                        }}
-                      >
-                        <input
-                          value={form.repeatEveryValue}
-                          onChange={(e) => onChange("repeatEveryValue", e.target.value)}
-                          placeholder="1"
-                          style={inputStyle}
-                        />
-                        <select
-                          value={form.repeatUnit}
-                          onChange={(e) =>
-                            onChange("repeatUnit", e.target.value as RepeatUnit)
-                          }
-                          style={inputStyle}
-                        >
-                          <option value="day">Day</option>
-                          <option value="week">Week</option>
-                          <option value="month">Month</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <FieldLabel label="Repeat Preview" />
-                      <div
-                        style={{
-                          ...inputStyle,
-                          display: "flex",
-                          alignItems: "center",
-                          background: "rgba(241,245,249,0.72)",
-                        }}
-                      >
-                        Repeats every {form.repeatEveryValue || "1"} {form.repeatUnit}
-                        {(form.repeatEveryValue || "1") !== "1" ? "s" : ""}
-                      </div>
-                    </div>
-
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <FieldLabel label="On" />
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 8,
-                        }}
-                      >
-                        {weekdayOptions.map((day) => (
-                          <WeekdayPill
-                            key={day}
-                            label={day}
-                            active={form.repeatDays.includes(day)}
-                            onClick={() => onToggleRepeatDay(day)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <div
-                className="gf-modal-two-col"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                {/* <div style={{ gridColumn: "1 / -1" }}>
-                  <FieldLabel label="Event Name" />
-                  <input
-                    value={form.title}
-                    onChange={(e) => onChange("title", e.target.value)}
-                    placeholder="Enter event name"
-                    style={inputStyle}
-                  />
-                </div> */}
-
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <FieldLabel label="Location" />
-                  <LocationCombobox
-                    value={form.location}
-                    options={locationOptions}
-                    onChange={(value) => onChange("location", value)}
-                  />
-                </div>
-
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <FieldLabel label="Event Date Type" />
-                  <SegmentedControl
-                    value={form.dateMode}
-                    options={[
-                      { value: "single", label: "Single Date" },
-                      { value: "range", label: "Date Range" },
-                    ]}
-                    onChange={(value) => onChange("dateMode", value)}
-                  />
-                </div>
-
-                {form.dateMode === "single" ? (
-                  <div>
-                    <FieldLabel label="Event Date" />
-                    <input
-                      type="date"
-                      value={form.eventDate}
-                      onChange={(e) => onChange("eventDate", e.target.value)}
-                      style={inputStyle}
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <FieldLabel label="Start Date" />
-                      <input
-                        type="date"
-                        value={form.rangeStartDate}
-                        onChange={(e) => onChange("rangeStartDate", e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <FieldLabel label="End Date" />
-                      <input
-                        type="date"
-                        value={form.rangeEndDate}
-                        onChange={(e) => onChange("rangeEndDate", e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <FieldLabel label="Start Time" />
-                  <select
-                    value={form.startTime}
-                    onChange={(e) => onChange("startTime", e.target.value)}
-                    style={inputStyle}
-                  >
-                    {timeOptions.map((time) => (
-                      <option key={`start-${time}`} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <FieldLabel label="End Time" />
-                  <select
-                    value={form.endTime}
-                    onChange={(e) => onChange("endTime", e.target.value)}
-                    style={inputStyle}
-                  >
-                    {timeOptions.map((time) => (
-                      <option key={`end-${time}`} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <FieldLabel label="Description" />
-                <textarea
-                  value={form.description}
-                  onChange={(e) => onChange("description", e.target.value)}
-                  placeholder="Describe the event..."
-                  style={{
-                    ...inputStyle,
-                    minHeight: 120,
-                    paddingTop: 14,
-                    resize: "vertical",
-                  }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {step === 3 ? (
-            <div style={{ display: "grid", gap: 14 }}>
-              <div
-                className="gf-modal-two-col"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <Toggle
-                  checked={form.allowDateChange}
-                  label="Allow date change"
-                  onToggle={() => onToggle("allowDateChange")}
-                />
-                <Toggle
-                  checked={form.allowReservations}
-                  label="Allow reservations"
-                  onToggle={() => onToggle("allowReservations")}
-                />
-                <Toggle
-                  checked={form.allowPasses}
-                  label="Allow passes"
-                  onToggle={() => onToggle("allowPasses")}
-                />
-
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 18,
-                    border: `1px solid ${borderColor}`,
-                    background: "rgba(255,255,255,0.84)",
-                  }}
-                >
-                  <FieldLabel label="Event Status" />
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {statusOptions.map((status) => (
-                      <ActionPill
-                        key={status}
-                        label={status === "Published" ? "Publish" : status}
-                        active={form.status === status}
-                        danger={status === "Cancelled"}
-                        onClick={() => onChange("status", status)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 16,
-                  borderRadius: 22,
-                  border: `1px solid ${borderColor}`,
-                  background: "rgba(255,255,255,0.84)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 900,
-                    letterSpacing: 1,
-                    textTransform: "uppercase",
-                    color: labelText,
-                    marginBottom: 10,
-                  }}
-                >
-                  Preview Summary
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 8,
-                    fontSize: 14,
-                    color: textSecondary,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  <div>
-                    <strong style={{ color: textPrimary }}>Event:</strong> {form.title || "Not set"}
-                  </div>
-                  <div>
-                    <strong style={{ color: textPrimary }}>Date:</strong>{" "}
-                    {form.dateMode === "range"
-                      ? `${formatDateUS(form.rangeStartDate)} - ${formatDateUS(form.rangeEndDate)}`
-                      : formatDateUS(form.eventDate)}
-                  </div>
-                  <div>
-                    <strong style={{ color: textPrimary }}>Time:</strong> {form.startTime} - {form.endTime}
-                  </div>
-                  <div>
-                    <strong style={{ color: textPrimary }}>Type:</strong> {form.kind}
-                  </div>
-                  <div>
-                    <strong style={{ color: textPrimary }}>Location:</strong> {form.location || "Not set"}
-                  </div>
-                  <div>
-                    <strong style={{ color: textPrimary }}>Status:</strong> {form.status}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              marginTop: 24,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {step > 1 ? (
-                <button type="button" onClick={onBack} style={secondaryButtonStyle}>
-                  Back
-                </button>
-              ) : (
-                <button type="button" onClick={onClose} style={secondaryButtonStyle}>
-                  Cancel
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {step < 3 ? (
-                <button type="button" onClick={onNext} style={primaryButtonStyle}>
-                  Next
-                </button>
-              ) : (
-                <button type="button" onClick={onSave} style={primaryButtonStyle}>
-                  Save Event
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+function buildPublicEventLink(slug: string) {
+  const baseUrl = getBaseSiteUrl()
+  return `${baseUrl}/book/map?event=${encodeURIComponent(slug)}`
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "13px 14px",
-  borderRadius: 14,
-  border: `1px solid ${borderColor}`,
-  outline: "none",
-  fontSize: 14,
-  fontWeight: 700,
-  color: textPrimary,
-  background: "rgba(255,255,255,0.9)",
-  boxSizing: "border-box",
-}
-
-const secondaryButtonStyle: React.CSSProperties = {
-  appearance: "none",
-  border: `1px solid ${borderColor}`,
-  background: "rgba(255,255,255,0.84)",
-  color: textPrimary,
-  borderRadius: 999,
-  padding: "12px 16px",
-  fontSize: 14,
-  fontWeight: 800,
-  cursor: "pointer",
-}
-
-const primaryButtonStyle: React.CSSProperties = {
-  appearance: "none",
-  border: "1px solid rgba(83,167,255,0.22)",
-  background: `linear-gradient(90deg, ${aqua} 0%, ${sky} 100%)`,
-  color: "#FFFFFF",
-  borderRadius: 999,
-  padding: "12px 18px",
-  fontSize: 14,
-  fontWeight: 900,
-  cursor: "pointer",
+function truncateTwoLinesStyle(): CSSProperties {
+  return {
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  }
 }
 
 export default function EventsPage() {
   const router = useRouter()
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const videoInputRef = useRef<HTMLInputElement | null>(null)
+  const searchParams = useSearchParams()
+  const supabase = useMemo(() => createClient(), [])
 
-  const [events, setEvents] = useState<EventRecord[]>(initialEvents)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<"create" | "edit">("create")
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [form, setForm] = useState<EventForm>(emptyForm)
-  const [filter, setFilter] = useState<"All" | EventStatus>("All")
+  const [mounted, setMounted] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [profile, setProfile] = useState<ProfileRecord | null>(null)
+  const [venue, setVenue] = useState<VenueRecord | null>(null)
+  const [events, setEvents] = useState<EventRecord[]>([])
+  const [filter, setFilter] = useState<EventStatusFilter>("All")
+  const [copiedLink, setCopiedLink] = useState("")
 
-  const publishedCount = events.filter((e) => e.status === "Published").length
-  const draftCount = events.filter((e) => e.status === "Draft").length
-  const cancelledCount = events.filter((e) => e.status === "Cancelled").length
+  const venueIdFromQuery = (searchParams.get("venueId") || "").trim()
+
+  useEffect(() => {
+    setMounted(true)
+
+    const desktopMedia = window.matchMedia("(max-width: 1160px)")
+    const mobileMedia = window.matchMedia("(max-width: 700px)")
+
+    const update = () => {
+      setIsNarrow(desktopMedia.matches)
+      setIsMobile(mobileMedia.matches)
+    }
+
+    update()
+
+    if (typeof desktopMedia.addEventListener === "function") {
+      desktopMedia.addEventListener("change", update)
+      mobileMedia.addEventListener("change", update)
+      return () => {
+        desktopMedia.removeEventListener("change", update)
+        mobileMedia.removeEventListener("change", update)
+      }
+    }
+
+    desktopMedia.addListener(update)
+    mobileMedia.addListener(update)
+    return () => {
+      desktopMedia.removeListener(update)
+      mobileMedia.removeListener(update)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    let active = true
+
+    async function loadEventsPage() {
+      setLoading(true)
+      setErrorMessage("")
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (!active) return
+
+        if (userError) throw new Error(userError.message)
+
+        if (!user) {
+          router.replace("/admin/login")
+          return
+        }
+
+        const { data: profileRow, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, role, is_active, first_name, last_name")
+          .eq("id", user.id)
+          .single()
+
+        if (!active) return
+
+        if (profileError) throw new Error(profileError.message)
+        setProfile(profileRow as ProfileRecord)
+
+        let resolvedVenueId = venueIdFromQuery
+
+        if (!resolvedVenueId) {
+          const { data: venueRows, error: venueLookupError } = await supabase
+            .from("venues")
+            .select("id")
+            .eq("created_by", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+
+          if (!active) return
+
+          if (venueLookupError) throw new Error(venueLookupError.message)
+          resolvedVenueId = venueRows?.[0]?.id || ""
+        }
+
+        if (!resolvedVenueId) {
+          router.replace("/admin/signup/hybrid/create")
+          return
+        }
+
+        const [venueRes, eventsRes] = await Promise.all([
+          supabase
+            .from("venues")
+            .select("id, name, city, state, description, active_status")
+            .eq("id", resolvedVenueId)
+            .single(),
+          supabase
+            .from("events")
+            .select(
+              "id, venue_id, title, slug, description, start_at, end_at, status, event_type, is_series, booking_type, flyer_image_url, cover_image_url, video_url, timezone, created_at"
+            )
+            .eq("venue_id", resolvedVenueId)
+            .order("start_at", { ascending: true }),
+        ])
+
+        if (!active) return
+
+        if (venueRes.error) throw new Error(venueRes.error.message)
+        if (eventsRes.error) throw new Error(eventsRes.error.message)
+
+        setVenue((venueRes.data || null) as VenueRecord | null)
+        setEvents((eventsRes.data || []) as EventRecord[])
+      } catch (error) {
+        if (!active) return
+        setErrorMessage(
+          error instanceof Error ? error.message : "Could not load events."
+        )
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void loadEventsPage()
+
+    return () => {
+      active = false
+    }
+  }, [mounted, router, supabase, venueIdFromQuery])
 
   const filteredEvents = useMemo(() => {
     if (filter === "All") return events
-    return events.filter((event) => event.status === filter)
+    return events.filter((event) => (event.status || "").toLowerCase() === filter)
   }, [events, filter])
 
-  function openCreateModal() {
-    setModalMode("create")
-    setForm(emptyForm)
-    setStep(1)
-    setModalOpen(true)
-  }
+  const liveCount = events.filter((event) => {
+    const status = (event.status || "").toLowerCase()
+    return status === "live" || status === "active"
+  }).length
 
-  function openEditModal(event: EventRecord) {
-    setModalMode("edit")
-    setForm({ ...event })
-    setStep(1)
-    setModalOpen(true)
-  }
+  const draftCount = events.filter(
+    (event) => (event.status || "").toLowerCase() === "draft"
+  ).length
 
-  function closeModal() {
-    setModalOpen(false)
-    setStep(1)
-    setForm(emptyForm)
-  }
+  const endedCount = events.filter(
+    (event) => (event.status || "").toLowerCase() === "ended"
+  ).length
 
-  function setFormField(field: keyof EventForm, value: string | boolean | Weekday[]) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
-  }
+  const displayName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
 
-  function toggleFormField(
-    field: "allowDateChange" | "allowReservations" | "allowPasses"
-  ) {
-    setForm((current) => ({
-      ...current,
-      [field]: !current[field],
-    }))
-  }
+  const dashboardHref = venue?.id
+    ? `/admin/dashboard?venueId=${venue.id}`
+    : "/admin/dashboard"
 
-  function pickMediaType(type: "image" | "video") {
-    setForm((current) => ({
-      ...current,
-      mediaType: type,
-    }))
-  }
+  const copyLink = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedLink(value)
 
-  function selectMediaFile(type: "image" | "video") {
-    if (type === "image") imageInputRef.current?.click()
-    if (type === "video") videoInputRef.current?.click()
-  }
-
-  function handleMediaFileSelected(
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "image" | "video"
-  ) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const previewUrl = URL.createObjectURL(file)
-
-    setForm((current) => ({
-      ...current,
-      mediaType: type,
-      mediaName: file.name,
-      mediaPreviewUrl: previewUrl,
-    }))
-  }
-
-  function toggleRepeatDay(day: Weekday) {
-    setForm((current) => {
-      const exists = current.repeatDays.includes(day)
-      return {
-        ...current,
-        repeatDays: exists
-          ? current.repeatDays.filter((item) => item !== day)
-          : [...current.repeatDays, day],
-      }
-    })
-  }
-
-  function nextStep() {
-    if (step === 1) setStep(2)
-    else if (step === 2) setStep(3)
-  }
-
-  function previousStep() {
-    if (step === 3) setStep(2)
-    else if (step === 2) setStep(1)
-  }
-
-  function saveEvent() {
-    const payload: EventRecord = {
-      ...form,
-      id: form.id || `event_${Date.now()}`,
-      title: form.title || "Untitled Event",
-      mediaPreviewUrl: form.mediaPreviewUrl || defaultPreview,
+      window.setTimeout(() => {
+        setCopiedLink((current) => (current === value ? "" : current))
+      }, 1600)
+    } catch {
+      setErrorMessage("Could not copy the event link.")
     }
-
-    if (modalMode === "create") {
-      setEvents((current) => [payload, ...current])
-    } else {
-      setEvents((current) =>
-        current.map((item) => (item.id === payload.id ? payload : item))
-      )
-    }
-
-    closeModal()
   }
 
-  function changeStatus(id: string, status: EventStatus) {
-    setEvents((current) =>
-      current.map((item) => (item.id === id ? { ...item, status } : item))
-    )
-  }
+  if (!mounted) return null
 
   return (
     <div
       style={{
         minHeight: "100dvh",
-        background: pageBackground,
-        color: textPrimary,
+        background:
+  "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
+        color: "#0F172A",
       }}
     >
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={(e) => handleMediaFileSelected(e, "image")}
-      />
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/*"
-        style={{ display: "none" }}
-        onChange={(e) => handleMediaFileSelected(e, "video")}
-      />
-
       <div
         style={{
           width: "100%",
           maxWidth: 1380,
           margin: "0 auto",
-          padding: "28px 18px 48px",
+          padding: isMobile ? "18px 12px 34px" : "28px 18px 48px",
           boxSizing: "border-box",
         }}
       >
@@ -2060,7 +877,7 @@ export default function EventsPage() {
                 fontWeight: 900,
                 letterSpacing: 1.2,
                 textTransform: "uppercase",
-                color: labelText,
+                color: "#64748B",
                 marginBottom: 8,
               }}
             >
@@ -2070,10 +887,10 @@ export default function EventsPage() {
             <h1
               style={{
                 margin: 0,
-                fontSize: 36,
+                fontSize: isMobile ? 30 : 36,
                 lineHeight: 1.04,
                 fontWeight: 900,
-                color: textPrimary,
+                color: "#0F172A",
               }}
             >
               Events
@@ -2084,13 +901,26 @@ export default function EventsPage() {
                 margin: "10px 0 0",
                 fontSize: 15,
                 lineHeight: 1.6,
-                color: textSecondary,
+                color: "#526077",
                 maxWidth: 760,
               }}
             >
-              Manage event series, dated event instances, booking rules, and
-              publish states for GuestFlow bookings.
+              Manage event basics, review publish states, and jump directly into the
+              existing event editor.
             </p>
+
+            {venue?.name ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  color: "#0F766E",
+                }}
+              >
+                {venue.name}
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -2101,56 +931,99 @@ export default function EventsPage() {
               justifyContent: "flex-end",
             }}
           >
-            <TopButton
-              label="Dashboard"
-              onClick={() => router.push("/admin/dashboard")}
-            />
-            <TopButton label="Create Event" active onClick={openCreateModal} />
+            <button
+              type="button"
+              onClick={() => router.push(dashboardHref)}
+              style={{
+                appearance: "none",
+                border: "1px solid rgba(255,255,255,0.20)",
+                background: "rgba(255,255,255,0.72)",
+                color: "#0F172A",
+                borderRadius: 999,
+                padding: "12px 16px",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+                boxShadow: "0 10px 22px rgba(15,23,42,0.04)",
+              }}
+            >
+              Dashboard
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/admin/signup/event/create")}
+              style={{
+                appearance: "none",
+                border: "1px solid rgba(15,118,110,0.16)",
+                background: "rgba(15,118,110,0.08)",
+                color: "#0F766E",
+                borderRadius: 999,
+                padding: "12px 16px",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+                boxShadow: "0 10px 22px rgba(15,23,42,0.04)",
+              }}
+            >
+              Create Event
+            </button>
           </div>
         </div>
 
+        {errorMessage ? (
+          <div
+            style={{
+              marginBottom: 18,
+              borderRadius: 18,
+              padding: "12px 14px",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.18)",
+              color: "#b91c1c",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.5,
+            }}
+          >
+            {errorMessage}
+          </div>
+        ) : null}
+
         <div
-          className="gf-kpi-grid"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gridTemplateColumns: isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))",
             gap: 16,
             marginBottom: 18,
           }}
         >
-          <KpiCard
+          <SnapshotCard
             label="Total Events"
-            value={`${events.length}`}
-            helper="All current event instances in the admin view"
+            value={String(events.length)}
+            helper="All current events linked to this venue"
           />
-          <KpiCard
-            label="Published"
-            value={`${publishedCount}`}
-            helper="Live and available for purchase"
+          <SnapshotCard
+            label="Live + Active"
+            value={String(liveCount)}
+            helper="Events currently intended to be purchasable"
           />
-          <KpiCard
+          <SnapshotCard
             label="Drafts"
-            value={`${draftCount}`}
-            helper="Saved but not yet available to guests"
-          />
-          <KpiCard
-            label="Cancelled"
-            value={`${cancelledCount}`}
-            helper="Disabled from active guest purchase flow"
+            value={String(draftCount)}
+            helper={`${endedCount} ended event${endedCount === 1 ? "" : "s"} also on file`}
           />
         </div>
 
         <div
-          className="gf-events-layout"
           style={{
             display: "grid",
-            gridTemplateColumns: "1.1fr 0.9fr",
+            gridTemplateColumns: isNarrow ? "1fr" : "1.15fr 0.85fr",
             gap: 18,
           }}
         >
           <SectionCard
             title="Event Instances"
-            subtitle="Create and manage live, draft, and cancelled events"
+            subtitle="Real events from the database. Edit opens the same event basics editor you just wired into create/edit mode."
             rightContent={
               <div
                 style={{
@@ -2159,44 +1032,79 @@ export default function EventsPage() {
                   flexWrap: "wrap",
                 }}
               >
-                <TopButton
+                <FilterPill
                   label="All"
                   active={filter === "All"}
                   onClick={() => setFilter("All")}
                 />
-                <TopButton
+                <FilterPill
                   label="Draft"
-                  active={filter === "Draft"}
-                  onClick={() => setFilter("Draft")}
+                  active={filter === "draft"}
+                  onClick={() => setFilter("draft")}
                 />
-                <TopButton
-                  label="Published"
-                  active={filter === "Published"}
-                  onClick={() => setFilter("Published")}
+                <FilterPill
+                  label="Live"
+                  active={filter === "live"}
+                  onClick={() => setFilter("live")}
                 />
-                <TopButton
-                  label="Cancelled"
-                  active={filter === "Cancelled"}
-                  onClick={() => setFilter("Cancelled")}
+                <FilterPill
+                  label="Scheduled"
+                  active={filter === "scheduled"}
+                  onClick={() => setFilter("scheduled")}
+                />
+                <FilterPill
+                  label="Ended"
+                  active={filter === "ended"}
+                  onClick={() => setFilter("ended")}
                 />
               </div>
             }
           >
-            <div
-              style={{
-                display: "grid",
-                gap: 16,
-              }}
-            >
-              {filteredEvents.map((event) => (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  onEdit={openEditModal}
-                  onStatusChange={changeStatus}
-                />
-              ))}
-            </div>
+            {loading ? (
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: "#475569",
+                }}
+              >
+                Loading events…
+              </div>
+            ) : filteredEvents.length ? (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 16,
+                }}
+              >
+                {filteredEvents.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    isNarrow={isMobile}
+                    copiedLink={copiedLink}
+                    onCopyLink={copyLink}
+                    onEdit={(eventId) =>
+                      router.push(`/admin/signup/event/create?eventId=${eventId}`)
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  borderRadius: 22,
+                  border: "1px dashed rgba(148,163,184,0.24)",
+                  background: "rgba(255,255,255,0.10)",
+                  color: "#64748B",
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  padding: 18,
+                }}
+              >
+                No events matched the selected filter.
+              </div>
+            )}
           </SectionCard>
 
           <div
@@ -2207,8 +1115,8 @@ export default function EventsPage() {
             }}
           >
             <SectionCard
-              title="Event Type Snapshot"
-              subtitle="High-level structure of current event mix"
+              title="Event Editing"
+              subtitle="How this screen now works"
             >
               <div
                 style={{
@@ -2217,75 +1125,57 @@ export default function EventsPage() {
                 }}
               >
                 <InfoBox
-                  title="Series Events"
-                  text="Use Series when an event should repeat on a recurring cadence and generate future instances from one branded format."
+                  title="Edit Event"
+                  text="Each event card now routes into the existing event basics page using ?eventId=..., so title, media, dates, times, booking type, and description can be updated."
                   tone="aqua"
                 />
                 <InfoBox
-                  title="Standalone Events"
-                  text="Use Standalone for one-off activations, special dates, or unique branded nights."
+                  title="Tickets + Locations"
+                  text="The event basics editor can still continue into the existing details screen for inventory, locations, and promo codes."
                   tone="sky"
                 />
                 <InfoBox
-                  title="Publishing"
-                  text="Draft keeps the event internal. Publish makes it live for purchase. Cancel removes it from active sales."
+                  title="Snapshot First"
+                  text="This page stays focused on listing and managing events. It no longer tries to be a local modal builder."
                   tone="coral"
                 />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Signed In"
+              subtitle="Current admin context"
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#526077",
+                }}
+              >
+                <div>
+                  <strong style={{ color: "#0F172A" }}>Admin:</strong>{" "}
+                  {displayName || "GuestFlow Admin"}
+                </div>
+                <div>
+                  <strong style={{ color: "#0F172A" }}>Role:</strong>{" "}
+                  {profile?.role || "venue_admin"}
+                </div>
+                <div>
+                  <strong style={{ color: "#0F172A" }}>Venue:</strong>{" "}
+                  {venue?.name || "Not resolved"}
+                </div>
+                <div>
+                  <strong style={{ color: "#0F172A" }}>Status:</strong>{" "}
+                  {venue?.active_status || "Active"}
+                </div>
               </div>
             </SectionCard>
           </div>
         </div>
       </div>
-
-      <EventWizardModal
-        open={modalOpen}
-        mode={modalMode}
-        step={step}
-        form={form}
-        onClose={closeModal}
-        onNext={nextStep}
-        onBack={previousStep}
-        onSave={saveEvent}
-        onChange={setFormField}
-        onToggle={toggleFormField}
-        onPickMediaType={pickMediaType}
-        onSelectMediaFile={selectMediaFile}
-        onToggleRepeatDay={toggleRepeatDay}
-      />
-
-      <style jsx>{`
-        @media (max-width: 1160px) {
-          .gf-kpi-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-
-          .gf-events-layout {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 900px) {
-          .gf-kpi-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .gf-modal-two-col,
-          .gf-media-preview-wrap {
-            grid-template-columns: 1fr !important;
-          }
-
-          .gf-event-card-head,
-          .gf-upload-tile {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .gf-event-meta {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }

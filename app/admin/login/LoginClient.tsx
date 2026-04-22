@@ -1,4 +1,3 @@
-// app/admin/LoginClient.tsx
 "use client"
 
 import Link from "next/link"
@@ -7,6 +6,11 @@ import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from
 import { createClient } from "@/app/lib/supabase/client"
 
 type AppRole = "customer" | "venue_admin" | "promoter" | "staff" | "super_admin"
+
+type VenueLite = {
+  id: string
+  name: string | null
+}
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -50,7 +54,7 @@ function EyeIcon({ open }: { open: boolean }) {
   )
 }
 
-function getRouteForRole(role: AppRole) {
+function getBaseRouteForRole(role: AppRole) {
   switch (role) {
     case "venue_admin":
       return "/admin/signup/hybrid/create"
@@ -64,6 +68,30 @@ function getRouteForRole(role: AppRole) {
     default:
       return "/"
   }
+}
+
+async function resolveVenueAdminRoute(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+) {
+  const { data: venueRows, error: venueError } = await supabase
+    .from("venues")
+    .select("id, name")
+    .eq("created_by", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  if (venueError) {
+    throw new Error(`Signed in, but venue lookup failed: ${venueError.message}`)
+  }
+
+  const latestVenue = (venueRows as VenueLite[] | null)?.[0] ?? null
+
+  if (!latestVenue?.id) {
+    return "/admin/signup/hybrid/create"
+  }
+
+  return `/admin/dashboard?venueId=${latestVenue.id}`
 }
 
 export default function LoginClient() {
@@ -157,7 +185,15 @@ export default function LoginClient() {
         return
       }
 
-      const route = getRouteForRole(profile.role as AppRole)
+      const role = profile.role as AppRole
+
+      if (role === "venue_admin") {
+        const route = await resolveVenueAdminRoute(supabase, data.user.id)
+        router.push(route)
+        return
+      }
+
+      const route = getBaseRouteForRole(role)
       router.push(route)
     } catch (error) {
       const message =
