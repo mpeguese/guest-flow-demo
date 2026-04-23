@@ -2179,14 +2179,22 @@ useEffect(() => {
     params.set("date", date)
   }
 
+  if (eventSlug) {
+    params.set("event", eventSlug)
+  }
+
   if (venueId) {
-  params.set("venueId", venueId)
-}
+    params.set("venueId", venueId)
+  }
+
+  if (mapIdFromQuery) {
+    params.set("mapId", mapIdFromQuery)
+  }
 
   const href = params.toString() ? `/book/map?${params.toString()}` : "/book/map"
 
   window.sessionStorage.setItem("gf-last-map-href", href)
-  }, [date, eventSlug, venueId])
+}, [date, eventSlug, venueId, mapIdFromQuery])
 
   function buildFrozenSelectionFromCurrent(): FrozenSelection | null {
   if (!selectedZone || !selectedZonePurchasable) return null

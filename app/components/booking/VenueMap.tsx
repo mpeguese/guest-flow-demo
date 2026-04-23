@@ -225,7 +225,7 @@ export default function VenueMap({
     onSelect(zoneId)
   }
 
-  const resolvedMapImageSrc = mapImageSrc || "/images/guestflow-rooftop.jpg"
+  const resolvedMapImageSrc = mapImageSrc || ""
   const hasPlacements = renderHotspots.length > 0
 
   if (!mounted) {
@@ -256,18 +256,28 @@ export default function VenueMap({
               userSelect: "none",
             }}
           >
-            <img
-              src={resolvedMapImageSrc}
-              alt={mapImageAlt}
-              draggable={false}
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-                userSelect: "none",
-                pointerEvents: "none",
-              }}
-            />
+            {resolvedMapImageSrc ? (
+              <img
+                src={resolvedMapImageSrc}
+                alt={mapImageAlt}
+                draggable={false}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                  userSelect: "none",
+                  pointerEvents: "none",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  minHeight: "100dvh",
+                  background: COLORS.bg,
+                }}
+              />
+            )}
 
             <div
               style={{
@@ -345,6 +355,7 @@ export default function VenueMap({
                 userSelect: "none",
               }}
             >
+              {resolvedMapImageSrc ? (
               <img
                 src={resolvedMapImageSrc}
                 alt={mapImageAlt}
@@ -357,6 +368,15 @@ export default function VenueMap({
                   pointerEvents: "none",
                 }}
               />
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  minHeight: "100dvh",
+                  background: COLORS.bg,
+                }}
+              />
+            )}
 
               <div
                 style={{

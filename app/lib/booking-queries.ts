@@ -90,35 +90,37 @@ type DbTableAreaStatusRow = {
 
 type DbVenueMapRow = {
   id: string
+  venue_id: string | null
   name: string | null
   floor_label: string | null
   storage_path: string | null
+  image_url: string | null
+  sort_order: number | null
   is_active: boolean | null
 }
 
-type DbEventMapRow = {
-  venue_map_id: string
-  is_default: boolean | null
-  sort_order: number | null
-  venue_maps: DbVenueMapRow | DbVenueMapRow[] | null
+type DbEventVenueRow = {
+  id: string
+  venue_id: string | null
 }
 
-type DbTableZoneJoinRow = {
+type DbVenueZoneRow = {
+  id: string
   code: string | null
   name: string | null
   description: string | null
-  zone_type: string | null
   capacity: number | null
   min_guests: number | null
   max_guests: number | null
   base_price: number | string | null
-  deposit_amount: number | string | null
   minimum_spend: number | string | null
-  display_order: number | null
   is_active: boolean | null
 }
 
-type DbMapZoneRow = {
+type DbVenueMapZoneRow = {
+  id: string
+  venue_map_id: string
+  venue_zone_id: string
   x_pct: number | string | null
   y_pct: number | string | null
   w_pct: number | string | null
@@ -126,7 +128,6 @@ type DbMapZoneRow = {
   rotation_deg: number | string | null
   z_index: number | null
   is_active: boolean | null
-  table_zones: DbTableZoneJoinRow | DbTableZoneJoinRow[] | null
 }
 
 type MappedVenueZone = VenueZone & {
@@ -333,64 +334,85 @@ function unwrapSingle<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] || null : value
 }
 
-async function getDefaultVenueMapForEvent(eventId: string): Promise<DbVenueMapRow | null> {
-  const eventMapResult = await supabase
-    .from("event_maps")
-    .select(`
-      venue_map_id,
-      is_default,
-      sort_order,
-      venue_maps (
-        id,
-        name,
-        floor_label,
-        storage_path,
-        is_active
-      )
-    `)
-    .eq("event_id", eventId)
-    .eq("is_active", true)
-    .order("is_default", { ascending: false })
-    .order("sort_order", { ascending: true })
-    .limit(1)
-    .maybeSingle<DbEventMapRow>()
+function getVenueMapImageUrl(map: DbVenueMapRow | null | undefined): string | null {
+  if (!map) return null
+  return toPublicMediaUrl(map.storage_path) || map.image_url || null
+}
 
-  if (eventMapResult.error) {
-    console.error("Failed to fetch event map:", eventMapResult.error.message)
+async function getDefaultVenueMapForEvent(eventId: string): Promise<DbVenueMapRow | null> {
+  const eventResult = await supabase
+    .from("events")
+    .select("id, venue_id")
+    .eq("id", eventId)
+    .maybeSingle<DbEventVenueRow>()
+
+  if (eventResult.error) {
+    console.error("Failed to fetch event for venue map:", eventResult.error.message)
     return null
   }
 
-  return unwrapSingle(eventMapResult.data?.venue_maps)
+  const venueId = eventResult.data?.venue_id
+  if (!venueId) {
+    console.error("No venue_id found for event:", eventId)
+    return null
+  }
+
+  const venueMapResult = await supabase
+    .from("venue_maps")
+    .select(`
+      id,
+      venue_id,
+      name,
+      floor_label,
+      storage_path,
+      image_url,
+      sort_order,
+      is_active
+    `)
+    .eq("venue_id", venueId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle<DbVenueMapRow>()
+
+  if (venueMapResult.error) {
+    console.error("Failed to fetch venue map:", venueMapResult.error.message)
+    return null
+  }
+
+  return venueMapResult.data || null
 }
 
 function mapMapZoneRowToVenueZone(
-  row: DbMapZoneRow,
+  placement: DbVenueMapZoneRow,
+  zone: DbVenueZoneRow,
   floorLabel: string | null
 ): MappedVenueZone | null {
-  const zone = unwrapSingle(row.table_zones)
-  if (!zone?.code || !zone.name) return null
+  if (!zone?.id || !zone.name) return null
   if (zone.is_active === false) return null
 
+  const code = zone.code || zone.id
+
   return {
-    id: zone.code,
-    svgId: zone.code,
-    code: zone.code,
+    id: zone.id,
+    svgId: code,
+    code,
     name: zone.name,
-    type: normalizeZoneType(zone.zone_type),
+    type: "table",
     floor: floorLabel || "Main",
-    section: zone.code,
+    section: code,
     capacityMin: zone.min_guests ?? 1,
     capacityMax: zone.max_guests ?? zone.capacity ?? zone.min_guests ?? 1,
-    price: toNumber(zone.deposit_amount ?? zone.base_price, 0),
+    price: toNumber(zone.base_price, 0),
     minSpend: toNumber(zone.minimum_spend, 0),
     description: zone.description || "",
     perks: [],
-    xPct: toNumber(row.x_pct, 0),
-    yPct: toNumber(row.y_pct, 0),
-    wPct: toNumber(row.w_pct, 0),
-    hPct: toNumber(row.h_pct, 0),
-    rotationDeg: toNumber(row.rotation_deg, 0),
-    zIndex: row.z_index ?? zone.display_order ?? 1,
+    xPct: toNumber(placement.x_pct, 0),
+    yPct: toNumber(placement.y_pct, 0),
+    wPct: toNumber(placement.w_pct, 0),
+    hPct: toNumber(placement.h_pct, 0),
+    rotationDeg: toNumber(placement.rotation_deg, 0),
+    zIndex: placement.z_index ?? 1,
   }
 }
 
@@ -399,60 +421,83 @@ export async function getVenueZonesForEventSlug(eventSlug: string): Promise<Venu
 
   const eventResult = await supabase
     .from("events")
-    .select("id")
+    .select("id, venue_id")
     .eq("slug", eventSlug)
-    .single<{ id: string }>()
+    .maybeSingle<DbEventVenueRow>()
 
   if (eventResult.error || !eventResult.data) {
     console.error("Failed to fetch event:", eventResult.error?.message)
     return []
   }
 
-  const eventId = eventResult.data.id
-
-  const venueMap = await getDefaultVenueMapForEvent(eventId)
+  const venueMap = await getDefaultVenueMapForEvent(eventResult.data.id)
   if (!venueMap?.id) {
-    console.error("No active event map found for event:", eventSlug)
+    console.error("No active venue map found for event:", eventSlug)
     return []
   }
 
-  const mapZonesResult = await supabase
-    .from("map_zones")
+  const placementsResult = await supabase
+    .from("venue_zones_coordinates")
     .select(`
+      id,
+      venue_map_id,
+      venue_zone_id,
       x_pct,
       y_pct,
       w_pct,
       h_pct,
       rotation_deg,
       z_index,
-      is_active,
-      table_zones!inner (
-        code,
-        name,
-        description,
-        zone_type,
-        capacity,
-        min_guests,
-        max_guests,
-        base_price,
-        deposit_amount,
-        minimum_spend,
-        display_order,
-        is_active
-      )
+      is_active
     `)
     .eq("venue_map_id", venueMap.id)
     .eq("is_active", true)
     .order("z_index", { ascending: true })
-    .returns<DbMapZoneRow[]>()
+    .returns<DbVenueMapZoneRow[]>()
 
-  if (mapZonesResult.error || !mapZonesResult.data) {
-    console.error("Failed to fetch map zones:", mapZonesResult.error?.message)
+  if (placementsResult.error || !placementsResult.data) {
+    console.error("Failed to fetch venue map zones:", placementsResult.error?.message)
     return []
   }
 
-  return mapZonesResult.data
-    .map((row) => mapMapZoneRowToVenueZone(row, venueMap.floor_label))
+  const placements = placementsResult.data
+  const venueZoneIds = [...new Set(placements.map((row) => row.venue_zone_id).filter(Boolean))]
+
+  if (venueZoneIds.length === 0) {
+    return []
+  }
+
+  const zonesResult = await supabase
+    .from("venue_zones")
+    .select(`
+      id,
+      code,
+      name,
+      description,
+      capacity,
+      min_guests,
+      max_guests,
+      base_price,
+      minimum_spend,
+      is_active
+    `)
+    .in("id", venueZoneIds)
+    .eq("is_active", true)
+    .returns<DbVenueZoneRow[]>()
+
+  if (zonesResult.error || !zonesResult.data) {
+    console.error("Failed to fetch venue zones:", zonesResult.error?.message)
+    return []
+  }
+
+  const zoneById = new Map(zonesResult.data.map((zone) => [zone.id, zone]))
+
+  return placements
+    .map((placement) => {
+      const zone = zoneById.get(placement.venue_zone_id)
+      if (!zone) return null
+      return mapMapZoneRowToVenueZone(placement, zone, venueMap.floor_label)
+    })
     .filter((zone): zone is MappedVenueZone => Boolean(zone))
 }
 
@@ -521,7 +566,10 @@ export async function getEventBookingMetaBySlug(
   const ticketImages = selectMediaUrls(media, "tickets", "image")
 
   const venueMap = await getDefaultVenueMapForEvent(event.id)
-  const dbMapImage = toPublicMediaUrl(venueMap?.storage_path)
+  const dbMapImage =
+    venueMap?.image_url ||
+    toPublicMediaUrl(venueMap?.storage_path)
+
   const mediaMapImages = selectMediaUrls(media, "map", "image")
   const mapImages = dbMapImage
     ? [dbMapImage, ...mediaMapImages.filter((url) => url !== dbMapImage)]

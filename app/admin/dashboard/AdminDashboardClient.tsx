@@ -944,7 +944,7 @@ export default function AdminDashboardPage() {
               {venueLocation || "Venue location not set yet"}
             </div>
 
-            <div
+            {/* <div
               style={{
                 marginTop: 10,
                 display: "inline-flex",
@@ -962,7 +962,7 @@ export default function AdminDashboardPage() {
               }}
             >
               {data.venue?.active_status || "Active"}
-            </div>
+            </div> */}
           </div>
 
           <div

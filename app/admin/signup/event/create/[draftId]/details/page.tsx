@@ -1414,34 +1414,44 @@ async function saveInventoryDraftToEvent(
   // SAVE TICKETS -> ticket_types
   // ----------------------------
   const ticketRows = payload.tickets.map((item, index) => {
-    let salesStatus = "upcoming"
-    if (item.status === "live") salesStatus = "live"
-    if (item.status === "ended") salesStatus = "ended"
+  const salesStatus =
+    item.status === "ended"
+      ? "ended"
+      : item.status === "scheduled"
+        ? "upcoming"
+        : "live"
 
-    return {
-      event_id: payload.eventId,
-      event_date_id: null,
-      name: item.name.trim() || `Ticket ${index + 1}`,
-      description: item.description.trim() || null,
-      category_label: null,
-      price: toNullableNumber(item.price) ?? 0,
-      currency: "USD",
-      quantity_total: toNullableInteger(item.quantity) ?? 0,
-      quantity_sold: 0,
-      per_order_limit: null,
-      sale_start_at: item.salesStart || null,
-      sale_end_at: item.salesEnd || null,
-      sales_status: salesStatus,
-      status: item.status === "draft" ? "draft" : "active",
-      sort_order: index,
-      is_visible: item.quantityVisible,
-      updated_at: payload.updatedAt,
-      subtitle: null,
-      image_path: null,
-      benefits: [],
-      badge_label: null,
-    }
-  })
+  const ticketStatus =
+    item.status === "ended"
+      ? "ended"
+      : item.status === "scheduled"
+        ? "draft"
+        : "live"
+
+  return {
+    event_id: payload.eventId,
+    event_date_id: null,
+    name: item.name.trim() || `Ticket ${index + 1}`,
+    description: item.description.trim() || null,
+    category_label: null,
+    price: toNullableNumber(item.price) ?? 0,
+    currency: "USD",
+    quantity_total: toNullableInteger(item.quantity) ?? 0,
+    quantity_sold: 0,
+    per_order_limit: null,
+    sale_start_at: item.salesStart || null,
+    sale_end_at: item.salesEnd || null,
+    sales_status: salesStatus,
+    status: ticketStatus,
+    sort_order: index,
+    is_visible: item.quantityVisible,
+    updated_at: payload.updatedAt,
+    subtitle: null,
+    image_path: null,
+    benefits: [],
+    badge_label: null,
+  }
+})
 
   const { error: deleteTicketsError } = await supabase
     .from("ticket_types")
