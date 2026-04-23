@@ -104,6 +104,7 @@ function ProfileIcon() {
   )
 }
 
+
 export default function EventTicketsPageClient({
   event,
   ticketTypes,

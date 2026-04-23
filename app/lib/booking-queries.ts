@@ -208,7 +208,16 @@ function normalizeStoragePath(storagePath: string | null | undefined): string | 
 }
 
 function toPublicMediaUrl(storagePath: string | null | undefined): string | null {
-  const normalizedPath = normalizeStoragePath(storagePath)
+  if (!storagePath) return null
+
+  const trimmed = storagePath.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed
+  }
+
+  const normalizedPath = normalizeStoragePath(trimmed)
   if (!normalizedPath) return null
 
   const { data } = supabase.storage.from(PUBLIC_MEDIA_BUCKET).getPublicUrl(normalizedPath)

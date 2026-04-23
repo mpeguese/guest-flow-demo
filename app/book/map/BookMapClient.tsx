@@ -3178,10 +3178,18 @@ useEffect(() => {
               }}
             >
               <button
+                // onClick={() => {
+                //   setPassesCardOpen(true)
+                //   setPromotionsModalOpen(false)
+                //   setPassModalOpen(true)
+                // }}
                 onClick={() => {
-                  setPassesCardOpen(true)
-                  setPromotionsModalOpen(false)
-                  setPassModalOpen(true)
+                  if (eventSlug) {
+                    router.push(`/book/event/${eventSlug}/tickets`)
+                    return
+                  }
+
+                  setCartMessage("Tickets are only available from an event page.")
                 }}
                 aria-label="Open passes"
                 style={{
