@@ -74,12 +74,15 @@ export default function EventBookingPageClient({
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [dragY, setDragY] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
 
   const startYRef = useRef(0)
   const startOffsetRef = useRef(0)
 
   const collapsedPeekHeight = 148
   const maxSheetTravel = useMemo(() => 155, [])
+
+
 
   function handleOpenMap() {
     const searchParams = new URLSearchParams({
@@ -206,7 +209,7 @@ export default function EventBookingPageClient({
             justifyContent: "flex-start",
           }}
         >
-          <button
+          {/* <button
             onClick={() => router.back()}
             aria-label="Go back"
             style={{
@@ -225,7 +228,7 @@ export default function EventBookingPageClient({
             }}
           >
             <BackIcon />
-          </button>
+          </button> */}
         </div>
 
         <div
@@ -412,14 +415,40 @@ export default function EventBookingPageClient({
               }}
             >
               {event.description ? (
-                <div
-                  style={{
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    color: "rgba(255,255,255,0.78)",
-                  }}
-                >
-                  {event.description}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: "rgba(255,255,255,0.78)",
+                      display: "-webkit-box",
+                      WebkitLineClamp: descriptionExpanded ? "unset" : 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      transition: "all 220ms ease",
+                    }}
+                  >
+                    {event.description}
+                  </div>
+
+                  {event.description.length > 110 ? (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionExpanded((prev) => !prev)}
+                      style={{
+                        marginTop: 8,
+                        padding: 0,
+                        border: "none",
+                        background: "transparent",
+                        color: "#FFFFFF",
+                        fontSize: 12,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {descriptionExpanded ? "Show less" : "Show more"}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -431,12 +460,24 @@ export default function EventBookingPageClient({
                   color: "rgba(255,255,255,0.78)",
                 }}
               >
-                {ticketCount} ticket options ·{" "}
+                {/* {ticketCount} ticket options ·{" "}
                 {startPrice === 0
                   ? "From Free"
                   : startPrice !== null
                     ? `From $${startPrice}`
-                    : "Unavailable"}
+                    : "Unavailable"} */}
+                {ticketCount > 0 ? (
+                  <>
+                    {ticketCount} ticket option{ticketCount === 1 ? "" : "s"} ·{" "}
+                    {startPrice === 0
+                      ? "From Free"
+                      : startPrice !== null
+                        ? `From $${startPrice}`
+                        : "Unavailable"}
+                  </>
+                ) : (
+                  <>No tickets available</>
+                )}
               </div>
             </div>
 
