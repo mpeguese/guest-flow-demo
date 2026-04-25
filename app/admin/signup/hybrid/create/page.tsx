@@ -976,7 +976,7 @@ export default function SignupHybridCreatePage() {
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
+          <div style={styles.gfMark}>GL</div>
 
           <Link href="/admin/signup?intent=hybrid" style={styles.backLink}>
             Back to signup

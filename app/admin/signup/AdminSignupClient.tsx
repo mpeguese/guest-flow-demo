@@ -462,7 +462,7 @@ export default function AdminSignupClient({
       <div style={styles.shell}>
         <section style={styles.card} className="admin-signup-card">
           <div style={styles.topRow}>
-            <div style={styles.gfMark}>GF</div>
+            <div style={styles.gfMark}>GL</div>
             <Link href="/admin" style={styles.backLink}>
               Back
             </Link>

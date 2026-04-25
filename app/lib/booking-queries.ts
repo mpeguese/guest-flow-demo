@@ -44,6 +44,24 @@ type DbEventRow = {
   event_media: DbEventMediaRow[] | null
 }
 
+type DbEventZoneRow = {
+  id: string
+  event_id: string
+  venue_id: string | null
+  venue_zone_id: string | null
+  code: string | null
+  name: string | null
+  description: string | null
+  capacity: number | null
+  min_guests: number | null
+  max_guests: number | null
+  base_price: number | string | null
+  deposit_amount: number | string | null
+  minimum_spend: number | string | null
+  status: string | null
+  is_active: boolean | null
+}
+
 type DbTicketTypeRow = {
   id: string
   name: string
@@ -425,6 +443,43 @@ function mapMapZoneRowToVenueZone(
   }
 }
 
+function mapMapZoneRowToEventZone(
+  placement: DbVenueMapZoneRow,
+  eventZone: DbEventZoneRow,
+  floorLabel: string | null
+): MappedVenueZone | null {
+  if (!eventZone?.id || !eventZone.name) return null
+  if (eventZone.is_active === false) return null
+
+  const code = eventZone.code || eventZone.venue_zone_id || eventZone.id
+
+  return {
+    id: eventZone.id,
+    svgId: code,
+    code,
+    name: eventZone.name,
+    type: "table",
+    floor: floorLabel || "Main",
+    section: code,
+    capacityMin: eventZone.min_guests ?? 1,
+    capacityMax:
+      eventZone.max_guests ??
+      eventZone.capacity ??
+      eventZone.min_guests ??
+      1,
+    price: toNumber(eventZone.base_price, 0),
+    minSpend: toNumber(eventZone.minimum_spend, 0),
+    description: eventZone.description || "",
+    perks: [],
+    xPct: toNumber(placement.x_pct, 0),
+    yPct: toNumber(placement.y_pct, 0),
+    wPct: toNumber(placement.w_pct, 0),
+    hPct: toNumber(placement.h_pct, 0),
+    rotationDeg: toNumber(placement.rotation_deg, 0),
+    zIndex: placement.z_index ?? 1,
+  }
+}
+
 export async function getVenueZonesForEventSlug(eventSlug: string): Promise<VenueZone[]> {
   if (!eventSlug) return []
 
@@ -434,12 +489,19 @@ export async function getVenueZonesForEventSlug(eventSlug: string): Promise<Venu
     .eq("slug", eventSlug)
     .maybeSingle<DbEventVenueRow>()
 
+  // if (eventResult.data.status === "draft") {
+  //   return []
+  // }
+
   if (eventResult.error || !eventResult.data) {
     console.error("Failed to fetch event:", eventResult.error?.message)
     return []
   }
 
-  const venueMap = await getDefaultVenueMapForEvent(eventResult.data.id)
+  const eventId = eventResult.data.id
+
+  const venueMap = await getDefaultVenueMapForEvent(eventId)
+
   if (!venueMap?.id) {
     console.error("No active venue map found for event:", eventSlug)
     return []
@@ -465,15 +527,68 @@ export async function getVenueZonesForEventSlug(eventSlug: string): Promise<Venu
     .returns<DbVenueMapZoneRow[]>()
 
   if (placementsResult.error || !placementsResult.data) {
-    console.error("Failed to fetch venue map zones:", placementsResult.error?.message)
+    console.error("Failed to fetch venue zone coordinates:", placementsResult.error?.message)
     return []
   }
 
   const placements = placementsResult.data
-  const venueZoneIds = [...new Set(placements.map((row) => row.venue_zone_id).filter(Boolean))]
+
+  if (placements.length === 0) {
+    return []
+  }
+
+  const venueZoneIds = [
+    ...new Set(placements.map((row) => row.venue_zone_id).filter(Boolean)),
+  ]
 
   if (venueZoneIds.length === 0) {
     return []
+  }
+
+  const eventZonesResult = await supabase
+    .from("event_zones")
+    .select(`
+      id,
+      event_id,
+      venue_id,
+      venue_zone_id,
+      code,
+      name,
+      description,
+      capacity,
+      min_guests,
+      max_guests,
+      base_price,
+      deposit_amount,
+      minimum_spend,
+      status,
+      is_active
+    `)
+    .eq("event_id", eventId)
+    .in("venue_zone_id", venueZoneIds)
+    .eq("is_active", true)
+    .returns<DbEventZoneRow[]>()
+
+  if (eventZonesResult.error) {
+    console.error("Failed to fetch event zones:", eventZonesResult.error.message)
+  }
+
+  const eventZones = eventZonesResult.data || []
+  const eventZoneByVenueZoneId = new Map(
+    eventZones
+      .filter((zone) => zone.venue_zone_id)
+      .map((zone) => [zone.venue_zone_id as string, zone])
+  )
+
+  if (eventZones.length > 0) {
+    return placements
+      .map((placement) => {
+        const eventZone = eventZoneByVenueZoneId.get(placement.venue_zone_id)
+        if (!eventZone) return null
+
+        return mapMapZoneRowToEventZone(placement, eventZone, venueMap.floor_label)
+      })
+      .filter((zone): zone is MappedVenueZone => Boolean(zone))
   }
 
   const zonesResult = await supabase
@@ -495,7 +610,7 @@ export async function getVenueZonesForEventSlug(eventSlug: string): Promise<Venu
     .returns<DbVenueZoneRow[]>()
 
   if (zonesResult.error || !zonesResult.data) {
-    console.error("Failed to fetch venue zones:", zonesResult.error?.message)
+    console.error("Failed to fetch fallback venue zones:", zonesResult.error?.message)
     return []
   }
 
@@ -505,6 +620,7 @@ export async function getVenueZonesForEventSlug(eventSlug: string): Promise<Venu
     .map((placement) => {
       const zone = zoneById.get(placement.venue_zone_id)
       if (!zone) return null
+
       return mapMapZoneRowToVenueZone(placement, zone, venueMap.floor_label)
     })
     .filter((zone): zone is MappedVenueZone => Boolean(zone))

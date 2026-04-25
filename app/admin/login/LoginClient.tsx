@@ -616,7 +616,7 @@ export default function LoginClient() {
                     : null),
                 }}
               >
-                <div style={styles.badge}>GuestFlow Admin</div>
+                <div style={styles.badge}>GuestLyst Admin</div>
 
                 <Link href="/admin" style={styles.backLink}>
                   Back
@@ -687,7 +687,7 @@ export default function LoginClient() {
                     </h2>
 
                     <div style={styles.loginCopy}>
-                      Access your GuestFlow Admin workspace.
+                      Access your GuestLyst Admin workspace.
                     </div>
 
                     <form style={styles.form} onSubmit={handleSubmit}>
@@ -695,7 +695,7 @@ export default function LoginClient() {
                         <label style={styles.fieldLabel}>Email</label>
                         <input
                           type="email"
-                          placeholder="manager@guestflow.com"
+                          placeholder="manager@guestlyst.com"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           autoComplete="email"
@@ -806,7 +806,7 @@ export default function LoginClient() {
                           : null),
                       }}
                     >
-                      <div style={styles.muted}>New to GuestFlow Admin?</div>
+                      <div style={styles.muted}>New to GuestLyst Admin?</div>
 
                       <Link href="/admin" style={styles.secondaryLink}>
                         Start setup

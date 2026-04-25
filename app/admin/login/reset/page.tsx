@@ -264,7 +264,7 @@ export default function AdminResetRequestPage() {
       <div style={styles.shell}>
         <section style={styles.hero}>
           <div style={styles.topRow}>
-            <div style={styles.badge}>GuestFlow Admin</div>
+            <div style={styles.badge}>GuestLyst Admin</div>
             <Link href="/admin/login" style={styles.backLink}>
               Back to sign in
             </Link>
@@ -294,7 +294,7 @@ export default function AdminResetRequestPage() {
                   <label style={styles.fieldLabel}>Email</label>
                   <input
                     type="email"
-                    placeholder="manager@guestflow.com"
+                    placeholder="manager@GuestLyst.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"

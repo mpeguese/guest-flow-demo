@@ -39,7 +39,7 @@ const PASS_CODE_REGEX = /^GF-PASS-[A-Z0-9]{6}-[A-Z0-9]{4}$/i
 const ZONE_CODE_REGEX = /^GF-RES-[A-Z0-9]{6}-[A-Z0-9]{4}$/i
 const RESERVATION_CODE_REGEX = /^GF-[A-Z0-9]{8}$/i
 
-function parseGuestFlowQr(rawValue: string): ParsedQr {
+function parseGuestLystQr(rawValue: string): ParsedQr {
   const original = String(rawValue || "").trim()
 
   if (!original) {
@@ -52,14 +52,14 @@ function parseGuestFlowQr(rawValue: string): ParsedQr {
 
   const lower = original.toLowerCase()
 
-  if (lower.startsWith("guestflow://pass/")) {
-    const value = original.slice("guestflow://pass/".length).trim()
+  if (lower.startsWith("GuestLyst://pass/")) {
+    const value = original.slice("GuestLyst://pass/".length).trim()
 
     if (!value) {
       return {
         ok: false,
         original,
-        reason: "Pass code is missing from the GuestFlow pass link.",
+        reason: "Pass code is missing from the GuestLyst pass link.",
       }
     }
 
@@ -76,18 +76,18 @@ function parseGuestFlowQr(rawValue: string): ParsedQr {
     return {
       ok: false,
       original,
-      reason: "GuestFlow pass link does not contain a valid pass code.",
+      reason: "GuestLyst pass link does not contain a valid pass code.",
     }
   }
 
-  if (lower.startsWith("guestflow://reservation/")) {
-    const value = original.slice("guestflow://reservation/".length).trim()
+  if (lower.startsWith("GuestLyst://reservation/")) {
+    const value = original.slice("GuestLyst://reservation/".length).trim()
 
     if (!value) {
       return {
         ok: false,
         original,
-        reason: "Reservation code is missing from the GuestFlow reservation link.",
+        reason: "Reservation code is missing from the GuestLyst reservation link.",
       }
     }
 
@@ -115,7 +115,7 @@ function parseGuestFlowQr(rawValue: string): ParsedQr {
       ok: false,
       original,
       reason:
-        "GuestFlow reservation link does not contain a valid reservation or zone code.",
+        "GuestLyst reservation link does not contain a valid reservation or zone code.",
     }
   }
 
@@ -152,7 +152,7 @@ function parseGuestFlowQr(rawValue: string): ParsedQr {
   return {
     ok: false,
     original,
-    reason: "QR code is not a recognized GuestFlow pass or reservation format.",
+    reason: "QR code is not a recognized GuestLyst pass or reservation format.",
   }
 }
 
@@ -174,7 +174,7 @@ function buildResultFromParsedQr(
       result: {
         status: "already_used",
         title: "Already Used",
-        description: "This GuestFlow QR code has already been checked in.",
+        description: "This GuestLyst QR code has already been checked in.",
         guestName: buildMockGuestName(code),
         passType: parsed.kind === "pass" ? "Guest Entry Pass" : "Reservation",
         eventName: "Neon Saturdays",
@@ -190,7 +190,7 @@ function buildResultFromParsedQr(
       result: {
         status: "voided",
         title: "Voided Pass",
-        description: "This GuestFlow pass was voided and cannot be used.",
+        description: "This GuestLyst pass was voided and cannot be used.",
         guestName: buildMockGuestName(code),
         passType: parsed.kind === "pass" ? "Guest Entry Pass" : "Reservation",
         eventName: "Neon Saturdays",
@@ -206,7 +206,7 @@ function buildResultFromParsedQr(
       result: {
         status: "refunded",
         title: "Refunded Pass",
-        description: "This GuestFlow order was refunded and is no longer active.",
+        description: "This GuestLyst order was refunded and is no longer active.",
         guestName: buildMockGuestName(code),
         passType: parsed.kind === "pass" ? "Guest Entry Pass" : "Reservation",
         eventName: "Neon Saturdays",
@@ -222,7 +222,7 @@ function buildResultFromParsedQr(
       result: {
         status: "valid",
         title: "Valid Pass",
-        description: "GuestFlow pass is active and ready for check-in.",
+        description: "GuestLyst pass is active and ready for check-in.",
         guestName: buildMockGuestName(code),
         passType: "Guest Entry Pass",
         eventName: "Neon Saturdays",
@@ -238,7 +238,7 @@ function buildResultFromParsedQr(
       result: {
         status: "valid",
         title: "Valid Reservation Item",
-        description: "GuestFlow reservation item is valid for venue access.",
+        description: "GuestLyst reservation item is valid for venue access.",
         guestName: buildMockGuestName(code),
         passType: "Table / Zone Reservation",
         eventName: "Neon Saturdays",
@@ -253,7 +253,7 @@ function buildResultFromParsedQr(
     result: {
       status: "valid",
       title: "Valid Reservation",
-      description: "GuestFlow reservation is confirmed and ready for lookup.",
+      description: "GuestLyst reservation is confirmed and ready for lookup.",
       guestName: buildMockGuestName(code),
       passType: "Reservation",
       eventName: "Neon Saturdays",
@@ -277,7 +277,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const parsed = parseGuestFlowQr(qrCode)
+    const parsed = parseGuestLystQr(qrCode)
 
     if (!parsed.ok) {
       return NextResponse.json({

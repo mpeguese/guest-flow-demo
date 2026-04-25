@@ -581,7 +581,7 @@ export default function SettingsPage() {
                 marginBottom: 8,
               }}
             >
-              GuestFlow Admin
+              GuestLyst Admin
             </div>
 
             <h1
@@ -606,7 +606,7 @@ export default function SettingsPage() {
               }}
             >
               Control organization details, booking rules, staff access, payment
-              preferences, and branding across your GuestFlow admin experience.
+              preferences, and branding across your GuestLyst admin experience.
             </p>
           </div>
 
@@ -651,7 +651,7 @@ export default function SettingsPage() {
           <StatusCard
             label="Branding"
             value="Miami Theme"
-            helper="Guest-facing surfaces are aligned with the current GuestFlow visual style."
+            helper="Guest-facing surfaces are aligned with the current GuestLyst visual style."
             tone="coral"
           /> */}
         </div>

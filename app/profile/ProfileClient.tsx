@@ -4,6 +4,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import MobileShell from "@/app/components/booking/MobileShell"
+import { supabase } from "../lib/supabase"
 
 const COLORS = {
   bg: "#FFFFFF",
@@ -41,6 +42,59 @@ const COUNTRY_CODES = [
   { label: "MX +52", value: "+52" },
   { label: "JM +1-876", value: "+1-876" },
 ]
+
+const AVATAR_BUCKET = "profile-images"
+
+type ProfileRow = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string | null
+  avatar_url: string | null
+  role: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+function splitStoredPhone(phone: string | null) {
+  if (!phone) {
+    return {
+      countryCode: "+1",
+      phoneNumber: "",
+    }
+  }
+
+  const matchedCode = COUNTRY_CODES.find((code) => phone.startsWith(code.value))
+
+  if (!matchedCode) {
+    return {
+      countryCode: "+1",
+      phoneNumber: phone,
+    }
+  }
+
+  return {
+    countryCode: matchedCode.value,
+    phoneNumber: phone.replace(matchedCode.value, "").trim(),
+  }
+}
+
+function getFileExtension(file: File) {
+  const nameParts = file.name.split(".")
+  const extension = nameParts[nameParts.length - 1]?.toLowerCase()
+
+  if (extension && extension.length <= 5) {
+    return extension
+  }
+
+  if (file.type === "image/png") return "png"
+  if (file.type === "image/webp") return "webp"
+  if (file.type === "image/heic") return "heic"
+
+  return "jpg"
+}
 
 function BackIcon() {
   return (
@@ -164,8 +218,83 @@ export default function ProfileClient() {
   const [phoneNumber, setPhoneNumber] = useState("")
   const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
   const [imagePreview, setImagePreview] = useState("")
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
   const [isImageOpen, setIsImageOpen] = useState(false)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [savingProfile, setSavingProfile] = useState(false)
+
+
+useEffect(() => {
+  let isMounted = true
+
+  async function loadProfile() {
+    setLoadingProfile(true)
+    setErrorMessage("")
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) {
+      if (!isMounted) return
+      setErrorMessage(userError.message)
+      setLoadingProfile(false)
+      return
+    }
+
+    if (!user) {
+      router.push("/admin/login")
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, email, phone, avatar_url, role, is_active, created_at, updated_at")
+      .eq("id", user.id)
+      .maybeSingle<ProfileRow>()
+
+    if (!isMounted) return
+
+    if (profileError) {
+      setErrorMessage(profileError.message)
+      setLoadingProfile(false)
+      return
+    }
+
+    const userEmail = user.email || ""
+
+    if (profile) {
+      const phoneParts = splitStoredPhone(profile.phone)
+
+      setFirstName(profile.first_name || "")
+      setLastName(profile.last_name || "")
+      setEmail(profile.email || userEmail)
+      setCountryCode(phoneParts.countryCode)
+      setPhoneNumber(phoneParts.phoneNumber)
+      setImagePreview(profile.avatar_url || "")
+    } else {
+      setFirstName((user.user_metadata?.first_name as string) || "")
+      setLastName((user.user_metadata?.last_name as string) || "")
+      setEmail(userEmail)
+      setCountryCode("+1")
+      setPhoneNumber("")
+      setImagePreview("")
+      setIsEditing(true)
+    }
+
+    setLoadingProfile(false)
+  }
+
+  loadProfile()
+
+  return () => {
+    isMounted = false
+  }
+}, [router])
+
 
   useEffect(() => {
     return () => {
@@ -175,35 +304,143 @@ export default function ProfileClient() {
     }
   }, [imagePreview])
 
-  function handleSave() {
-    setSaveMessage("Profile details saved locally for this session.")
-    setIsEditing(false)
+  async function handleSave() {
+  setSavingProfile(true)
+  setSaveMessage("")
+  setErrorMessage("")
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError) {
+    setErrorMessage(userError.message)
+    setSavingProfile(false)
+    return
   }
 
-  function handleProfileImageClick() {
-    if (imagePreview) {
-      setIsImageOpen(true)
+  if (!user) {
+    router.push("/admin/login")
+    return
+  }
+
+  const trimmedFirstName = firstName.trim()
+  const trimmedLastName = lastName.trim()
+  const trimmedEmail = email.trim().toLowerCase()
+  const trimmedPhone = phoneNumber.trim()
+  const fullPhone = trimmedPhone ? `${countryCode} ${trimmedPhone}` : null
+
+  if (!trimmedFirstName) {
+    setErrorMessage("First name is required.")
+    setSavingProfile(false)
+    return
+  }
+
+  if (!trimmedLastName) {
+    setErrorMessage("Last name is required.")
+    setSavingProfile(false)
+    return
+  }
+
+  if (!trimmedEmail) {
+    setErrorMessage("Email is required.")
+    setSavingProfile(false)
+    return
+  }
+
+  let nextAvatarUrl = imagePreview.startsWith("blob:") ? "" : imagePreview
+
+  if (selectedImageFile) {
+    const extension = getFileExtension(selectedImageFile)
+    const filePath = `${user.id}/avatar-${Date.now()}.${extension}`
+
+    const { error: uploadError } = await supabase.storage
+      .from(AVATAR_BUCKET)
+      .upload(filePath, selectedImageFile, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: selectedImageFile.type,
+      })
+
+    if (uploadError) {
+      setErrorMessage(uploadError.message)
+      setSavingProfile(false)
       return
     }
 
+    const { data: publicUrlData } = supabase.storage
+      .from(AVATAR_BUCKET)
+      .getPublicUrl(filePath)
+
+    nextAvatarUrl = publicUrlData.publicUrl
+  }
+
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      first_name: trimmedFirstName,
+      last_name: trimmedLastName,
+      email: trimmedEmail,
+      phone: fullPhone,
+      avatar_url: nextAvatarUrl || null,
+      marketing_opt_in: marketingOptIn,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "id",
+    }
+  )
+
+  if (profileError) {
+    setErrorMessage(profileError.message)
+    setSavingProfile(false)
+    return
+  }
+
+  setEmail(trimmedEmail)
+  setImagePreview(nextAvatarUrl)
+  setSelectedImageFile(null)
+  setSaveMessage("Profile saved successfully.")
+  setIsEditing(false)
+  setSavingProfile(false)
+}
+
+  function handleProfileImageClick() {
     fileInputRef.current?.click()
   }
 
-  function handleChangePhotoClick() {
-    fileInputRef.current?.click()
-  }
+  // function handleChangePhotoClick() {
+  //   fileInputRef.current?.click()
+  // }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      setErrorMessage("Please choose a valid image file.")
+      return
+    }
+
+    const maxSizeInMb = 5
+    const maxSizeInBytes = maxSizeInMb * 1024 * 1024
+
+    if (file.size > maxSizeInBytes) {
+      setErrorMessage(`Profile photo must be ${maxSizeInMb}MB or smaller.`)
+      return
+    }
 
     if (imagePreview.startsWith("blob:")) {
       URL.revokeObjectURL(imagePreview)
     }
 
     const nextUrl = URL.createObjectURL(file)
+
+    setSelectedImageFile(file)
     setImagePreview(nextUrl)
-    setSaveMessage("Profile photo added locally for this session.")
+    setSaveMessage("")
+    setErrorMessage("")
   }
 
   const inputBaseStyle: React.CSSProperties = {
@@ -388,81 +625,83 @@ export default function ProfileClient() {
                   textAlign: "center",
                 }}
               >
-                <button
-                    type="button"
-                    onClick={handleProfileImageClick}
-                    aria-label={imagePreview ? "Open profile photo" : "Upload profile photo"}
-                    title={imagePreview ? "Open profile photo" : "Upload profile photo"}
+                <div
+                role="button"
+                tabIndex={0}
+                onClick={handleProfileImageClick}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    handleProfileImageClick()
+                  }
+                }}
+                aria-label={imagePreview ? "Change profile photo" : "Upload profile photo"}
+                title={imagePreview ? "Change profile photo" : "Upload profile photo"}
+                style={{
+                  width: 300,
+                  height: 300,
+                  borderRadius: 14,
+                  border: `1.5px solid ${
+                    imagePreview ? "rgba(14,165,233,0.22)" : COLORS.border
+                  }`,
+                  background: imagePreview
+                    ? `url(${imagePreview}) center / cover no-repeat`
+                    : "linear-gradient(180deg, rgba(224,242,254,0.92) 0%, rgba(240,249,255,0.96) 100%)",
+                  boxShadow: "0 16px 34px rgba(15,23,42,0.12)",
+                  position: "relative",
+                  cursor: "pointer",
+                  overflow: "hidden",
+                  display: "grid",
+                  placeItems: "center",
+                  color: imagePreview ? "#FFFFFF" : COLORS.primaryHover,
+                  padding: 0,
+                  outline: "none",
+                }}
+              >
+                {!imagePreview ? (
+                  <CameraIcon />
+                ) : (
+                  <div
                     style={{
-                        width: 200,
-                        height: 200,
-                        borderRadius: 20,
-                        border: `1.5px solid ${imagePreview ? "rgba(14,165,233,0.22)" : COLORS.border}`,
-                        background: imagePreview
-                        ? `url(${imagePreview}) center / cover no-repeat`
-                        : "linear-gradient(180deg, rgba(224,242,254,0.92) 0%, rgba(240,249,255,0.96) 100%)",
-                        boxShadow: "0 16px 34px rgba(15,23,42,0.12)",
-                        position: "relative",
-                        cursor: "pointer",
-                        overflow: "hidden",
-                        display: "grid",
-                        placeItems: "center",
-                        color: imagePreview ? "#FFFFFF" : COLORS.primaryHover,
-                        padding: 0,
+                      position: "absolute",
+                      inset: 0,
+                      background:
+                        "linear-gradient(180deg, rgba(15,23,42,0.00) 35%, rgba(15,23,42,0.28) 100%)",
+                      pointerEvents: "none",
                     }}
-                    >
-                    {!imagePreview ? (
-                        <CameraIcon />
-                    ) : (
-                        <div
-                        style={{
-                            position: "absolute",
-                            inset: 0,
-                            background: "linear-gradient(180deg, rgba(15,23,42,0.00) 35%, rgba(15,23,42,0.28) 100%)",
-                        }}
-                        />
-                    )}
+                  />
+                )}
 
-                    {imagePreview ? (
-                        <div
-                        style={{
-                            position: "absolute",
-                            right: 8,
-                            bottom: 8,
-                            width: 30,
-                            height: 30,
-                            borderRadius: 999,
-                            background: "rgba(255,255,255,0.92)",
-                            color: COLORS.text,
-                            display: "grid",
-                            placeItems: "center",
-                            boxShadow: "0 8px 16px rgba(15,23,42,0.16)",
-                        }}
-                        >
-                        <ExpandIcon />
-                        </div>
-                    ) : null}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleChangePhotoClick}
-                  style={{
-                    marginTop: 14,
-                    height: 38,
-                    padding: "0 16px",
-                    borderRadius: 999,
-                    border: `1px solid ${COLORS.border}`,
-                    background: "rgba(255,255,255,0.92)",
-                    color: COLORS.text,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    boxShadow: "0 10px 18px rgba(15,23,42,0.06)",
-                  }}
-                >
-                  {imagePreview ? "Change Photo" : "Add Photo"}
-                </button>
+                {imagePreview ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIsImageOpen(true)
+                    }}
+                    aria-label="Expand profile photo"
+                    title="Expand profile photo"
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      bottom: 8,
+                      width: 34,
+                      height: 34,
+                      borderRadius: 999,
+                      border: "none",
+                      background: "rgba(255,255,255,0.92)",
+                      color: COLORS.text,
+                      display: "grid",
+                      placeItems: "center",
+                      boxShadow: "0 8px 16px rgba(15,23,42,0.16)",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    <ExpandIcon />
+                  </button>
+                ) : null}
+              </div>
 
                 {/* <div
                   style={{
@@ -728,21 +967,37 @@ export default function ProfileClient() {
                 </div>
               </label>
 
-              {saveMessage ? (
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: `1px solid rgba(20,184,166,0.18)`,
-                    background: COLORS.accentSoft,
-                    color: "#0F766E",
-                    fontSize: 13,
-                    fontWeight: 800,
-                  }}
-                >
-                  {saveMessage}
-                </div>
-              ) : null}
+              {errorMessage ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: `1px solid rgba(239,68,68,0.20)`,
+                  background: COLORS.dangerSoft,
+                  color: "#B91C1C",
+                  fontSize: 13,
+                  fontWeight: 800,
+                }}
+              >
+                {errorMessage}
+              </div>
+            ) : null}
+
+            {saveMessage ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: `1px solid rgba(20,184,166,0.18)`,
+                  background: COLORS.accentSoft,
+                  color: "#0F766E",
+                  fontSize: 13,
+                  fontWeight: 800,
+                }}
+              >
+                {saveMessage}
+              </div>
+            ) : null}
             </div>
 
             <div
@@ -753,22 +1008,27 @@ export default function ProfileClient() {
             >
               <button
                 onClick={handleSave}
+                disabled={savingProfile || loadingProfile}
                 style={{
                   width: "100%",
                   height: 54,
                   border: "none",
                   borderRadius: 20,
-                  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                  background:
+                    savingProfile || loadingProfile
+                      ? "linear-gradient(180deg, #94A3B8 0%, #64748B 100%)"
+                      : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
                   color: "#FFFFFF",
                   fontSize: 16,
                   fontWeight: 900,
                   letterSpacing: 0.2,
-                  cursor: "pointer",
+                  cursor: savingProfile || loadingProfile ? "not-allowed" : "pointer",
                   boxShadow: "0 14px 28px rgba(14,165,233,0.24)",
+                  opacity: savingProfile || loadingProfile ? 0.78 : 1,
                 }}
               >
-                Save & Continue
-              </button>
+                {savingProfile ? "Saving..." : "Save & Continue"}
+             </button>
 
               <div
                 style={{
@@ -877,7 +1137,7 @@ export default function ProfileClient() {
                 position: "fixed",
                 inset: 0,
                 zIndex: 100,
-                background: "rgba(2,6,23,0.78)",
+                background: "rgba(2,6,23,0.82)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -889,67 +1149,56 @@ export default function ProfileClient() {
               <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
+                  position: "relative",
                   width: "100%",
                   maxWidth: 420,
-                  borderRadius: 28,
-                  overflow: "hidden",
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  boxShadow: "0 30px 70px rgba(0,0,0,0.34)",
+                  display: "flex",
+                  justifyContent: "center",
                 }}
               >
-                <div
+                <button
+                  type="button"
+                  onClick={() => setIsImageOpen(false)}
+                  aria-label="Close profile photo"
+                  title="Close profile photo"
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "14px 14px 0",
+                    position: "absolute",
+                    top: 10,
+                    right: 10,
+                    zIndex: 2,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.24)",
+                    background: "rgba(15,23,42,0.46)",
+                    color: "#FFFFFF",
+                    cursor: "pointer",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    display: "grid",
+                    placeItems: "center",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    boxShadow: "0 10px 24px rgba(0,0,0,0.24)",
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      letterSpacing: 0.7,
-                      color: "rgba(255,255,255,0.88)",
-                    }}
-                  >
-                    PROFILE PHOTO
-                  </div>
+                  ×
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsImageOpen(false)}
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      background: "rgba(255,255,255,0.10)",
-                      color: "#FFFFFF",
-                      cursor: "pointer",
-                      fontSize: 18,
-                      fontWeight: 700,
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div style={{ padding: 14 }}>
-                  <img
-                    src={imagePreview}
-                    alt="Profile preview"
-                    style={{
-                      width: "100%",
-                      height: "auto",
-                      display: "block",
-                      borderRadius: 22,
-                      objectFit: "cover",
-                      maxHeight: "70vh",
-                    }}
-                  />
-                </div>
+                <img
+                  src={imagePreview}
+                  alt="Profile preview"
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    display: "block",
+                    borderRadius: 24,
+                    objectFit: "cover",
+                    maxHeight: "78vh",
+                    boxShadow: "0 28px 70px rgba(0,0,0,0.36)",
+                  }}
+                />
               </div>
             </div>
           ) : null}

@@ -713,7 +713,7 @@ export default function HybridBusinessPage() {
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
+          <div style={styles.gfMark}>GL</div>
 
           <div style={styles.topActions}>
             <button type="button" style={styles.addBusinessBtn} onClick={resetForNewBusiness}>
@@ -746,7 +746,7 @@ export default function HybridBusinessPage() {
                     style={styles.input}
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="GuestFlow Hospitality Group"
+                    placeholder="GuestLyst Hospitality Group"
                   />
                 </div>
 

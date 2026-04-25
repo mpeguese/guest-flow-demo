@@ -115,6 +115,7 @@ export default function HybridCreateMapClient() {
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const venueId = (searchParams.get("venueId") || "").trim()
+  const from = (searchParams.get("from") || "").trim()
 
   const [name, setName] = useState("")
   const [floorLabel, setFloorLabel] = useState("")
@@ -122,6 +123,8 @@ export default function HybridCreateMapClient() {
   const [previewUrl, setPreviewUrl] = useState("")
   const [fileName, setFileName] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
+  const venueIdFromQuery = (searchParams.get("venueId") || "").trim()
 
   const [maps, setMaps] = useState<VenueMapRow[]>([])
   const [loadingMaps, setLoadingMaps] = useState(true)
@@ -381,12 +384,21 @@ export default function HybridCreateMapClient() {
     }
   }
 
+  function handleBack() {
+    if (from === "dashboard") {
+      router.push(`/admin/dashboard?venueId=${venueId}`)
+      return
+    }
+
+    router.push(`/admin/signup/hybrid/create?venueId=${venueId}`)
+  }
+
   const styles: Record<string, CSSProperties> = {
     page: {
       minHeight: "100vh",
       background:
         "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
-      padding: "22px 14px 28px",
+      padding: "22px 14px 96px",
       boxSizing: "border-box",
     },
     shell: {
@@ -756,6 +768,62 @@ export default function HybridCreateMapClient() {
       fontSize: 14,
       lineHeight: 1.65,
     },
+    bottomPillWrap: {
+      position: "sticky",
+      bottom: 12,
+      zIndex: 20,
+      marginTop: 18,
+    },
+
+    bottomPill: {
+      maxWidth: 760,
+      margin: "0 auto",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,0.24)",
+      background: "rgba(255,255,255,0.18)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      boxShadow: "0 20px 44px rgba(15,23,42,0.10)",
+      padding: 8,
+      display: "flex",
+      gap: 8,
+    },
+
+    bottomPillButton: {
+      flex: 1,
+      height: 48,
+      borderRadius: 999,
+      border: "none",
+      background: "transparent",
+      color: "#475569",
+      textDecoration: "none",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit",
+    },
+
+  bottomPillPrimary: {
+    flex: 1.1,
+    height: 48,
+    borderRadius: 999,
+    border: "none",
+    background: "linear-gradient(135deg, #38BDF8 0%, #22D3EE 100%)",
+    color: "#FFFFFF",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 10px 22px rgba(15,23,42,0.12)",
+    minWidth: 0,
+    opacity: submitting ? 0.8 : 1,
+  },
   }
 
   return (
@@ -805,7 +873,7 @@ export default function HybridCreateMapClient() {
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
+          <div style={styles.gfMark}>GL</div>
 
           <Link href="/admin/signup/hybrid/create" style={styles.backLink}>
             Back to SetUp
@@ -839,7 +907,7 @@ export default function HybridCreateMapClient() {
             <div style={styles.card}>
               <div style={styles.cardLabel}>Add Map</div>
 
-              <form onSubmit={handleAddMap}>
+              <form id="venue-map-form" onSubmit={handleAddMap}>
                 <div style={styles.formGrid} className="map-form-grid">
                   <div>
                     <label style={styles.label}>Map Name</label>
@@ -902,7 +970,7 @@ export default function HybridCreateMapClient() {
 
                 {fileName ? <div style={styles.filePill}>{fileName}</div> : null}
 
-                <div style={styles.footer}>
+                {/* <div style={styles.footer}>
                   <Link href="/admin/signup/hybrid/create" style={styles.ghostBtn}>
                     Back
                   </Link>
@@ -910,7 +978,7 @@ export default function HybridCreateMapClient() {
                   <button type="submit" style={styles.primaryBtn} disabled={submitting}>
                     {submitting ? "Adding..." : "Add Map"}
                   </button>
-                </div>
+                </div> */}
               </form>
             </div>
 
@@ -968,7 +1036,7 @@ export default function HybridCreateMapClient() {
                               style={styles.mapActionBtn}
                               onClick={() =>
                                 router.push(
-                                  `/admin/signup/hybrid/create/zones/${map.id}?venueId=${venueId}`
+                                  `/admin/signup/hybrid/create/zones/${map.id}?venueId=${venueId}&from=setup`
                                 )
                               }
                             >
@@ -988,8 +1056,41 @@ export default function HybridCreateMapClient() {
               )}
             </div>
           </div>
+          
         </section>
       </div>
+      <section style={styles.bottomPillWrap}>
+        <div style={styles.bottomPill}>
+          <button
+            type="button"
+            onClick={handleBack}
+            //onClick={() => router.push(`/admin/dashboard?venueId=${venueIdFromQuery}`)}
+            style={styles.bottomPillButton}
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => {
+              const form = document.getElementById("venue-map-form") as HTMLFormElement | null
+              form?.requestSubmit()
+            }}
+            style={styles.bottomPillPrimary}
+          >
+            {submitting ? "Adding..." : "Add Map"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push(`/admin/dashboard?venueId=${venueId}`)}
+            style={styles.bottomPillButton}
+          >
+            Dashboard
+          </button>
+        </div>
+      </section>
     </div>
   )
 }

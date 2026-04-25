@@ -358,7 +358,7 @@ export default function AdminUpdatePasswordPage() {
       <div style={styles.shell}>
         <section style={styles.hero}>
           <div style={styles.topRow}>
-            <div style={styles.badge}>GuestFlow Admin</div>
+            <div style={styles.badge}>GuestLyst Admin</div>
             <Link href="/admin/login" style={styles.backLink}>
               Back to sign in
             </Link>
@@ -372,7 +372,7 @@ export default function AdminUpdatePasswordPage() {
             </h1>
 
             <div style={styles.copy}>
-              Choose a new password for your GuestFlow Admin account.
+              Choose a new password for your GuestLyst Admin account.
             </div>
           </div>
 

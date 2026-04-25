@@ -934,7 +934,7 @@ export default function HybridZonesPage() {
       minHeight: "100vh",
       background:
         "linear-gradient(to bottom, #eaecc6, #2bc0e4)",
-      padding: "22px 14px 28px",
+      padding: "22px 14px 96px",
       boxSizing: "border-box",
     },
     shell: {
@@ -1529,6 +1529,63 @@ export default function HybridZonesPage() {
       boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
       opacity: saving ? 0.7 : 1,
     },
+    bottomPillWrap: {
+      position: "sticky",
+      bottom: 12,
+      zIndex: 20,
+      marginTop: 18,
+    },
+
+    bottomPill: {
+      maxWidth: 760,
+      margin: "0 auto",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,0.24)",
+      background: "rgba(255,255,255,0.18)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      boxShadow: "0 20px 44px rgba(15,23,42,0.10)",
+      padding: 8,
+      display: "flex",
+      gap: 8,
+    },
+
+    bottomPillButton: {
+      flex: 1,
+      height: 48,
+      borderRadius: 999,
+      border: "none",
+      background: "transparent",
+      color: "#475569",
+      textDecoration: "none",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit",
+    },
+
+  bottomPillPrimary: {
+    flex: 1.1,
+    height: 48,
+    borderRadius: 999,
+    border: "none",
+    background: "linear-gradient(135deg, #38BDF8 0%, #22D3EE 100%)",
+    color: "#FFFFFF",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 10px 22px rgba(15,23,42,0.12)",
+    minWidth: 0,
+    //opacity: submitting ? 0.8 : 1,
+  },
+
   }
 
   return (
@@ -1607,14 +1664,7 @@ export default function HybridZonesPage() {
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
-
-          <Link
-            href={`/admin/signup/hybrid/create/map?venueId=${venueIdFromQuery || mapRecord?.venue_id || ""}`}
-            style={styles.backLink}
-          >
-            Back to Set Up
-          </Link>
+          <div style={styles.gfMark}>GL</div>
         </div>
 
         <section style={styles.heroPanel}>
@@ -1915,12 +1965,12 @@ export default function HybridZonesPage() {
             </div>
           </div>
 
-          <div style={styles.modalFooter}>
+          {/* <div style={styles.modalFooter}>
             <Link
               href={`/admin/signup/hybrid/create/map?venueId=${venueIdFromQuery || mapRecord?.venue_id || ""}`}
               style={styles.ghostBtn}
             >
-              Back to Maps
+              Old Back to Maps
             </Link>
 
             <button
@@ -1935,7 +1985,36 @@ export default function HybridZonesPage() {
             >
               {saving ? "Saving..." : "Return to Hybrid"}
             </button>
-          </div>
+          </div> */}
+
+          <section style={styles.bottomPillWrap}>
+        <div style={styles.bottomPill}>
+          <button
+            type="button"
+            onClick={() => router.push(`/admin/signup/hybrid/create/map?venueId=${venueIdFromQuery || mapRecord?.venue_id || ""}`)}
+            style={styles.bottomPillButton}
+          >
+            Back to Maps
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+            }}
+            style={styles.bottomPillPrimary}
+          >
+            Help
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push(`/admin/dashboard`)}
+            style={styles.bottomPillButton}
+          >
+            Dashboard
+          </button>
+        </div>
+      </section>
         </section>
       </div>
 

@@ -593,7 +593,7 @@ export default function AdminReservationsPage() {
                   color: "#0F766E",
                 }}
               >
-                GuestFlow Reservations
+                GuestLyst Reservations
               </div>
 
               <div

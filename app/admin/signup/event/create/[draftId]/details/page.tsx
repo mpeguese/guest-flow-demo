@@ -79,6 +79,7 @@ type EventContextRow = {
   start_at: string | null
   end_at: string | null
   is_series: boolean | null
+  status: "draft" | "scheduled" | "live" | "ended" | string | null
 }
 
 type EventDateRow = {
@@ -299,12 +300,12 @@ function emptyPromoCode(): PromoCodeItem {
 }
 
 function readDraft(draftId: string): EventDraftRecord | null {
-  const raw = localStorage.getItem(`guestflow:eventDraft:${draftId}`)
+  const raw = localStorage.getItem(`GuestLyst:eventDraft:${draftId}`)
   return raw ? JSON.parse(raw) : null
 }
 
 function writeDraft(record: EventDraftRecord) {
-  localStorage.setItem(`guestflow:eventDraft:${record.id}`, JSON.stringify(record))
+  localStorage.setItem(`GuestLyst:eventDraft:${record.id}`, JSON.stringify(record))
 }
 
 function normalizeTicket(item: Partial<TicketItem>): TicketItem {
@@ -1472,48 +1473,50 @@ async function saveInventoryDraftToEvent(
     }
   }
 
+
   // ----------------------------
   // SAVE LOCATIONS -> event_zones
   // ----------------------------
-  const zoneRows = payload.locations
-    .filter((item) => item.venueZoneId)
-    .map((item, index) => {
-      const displayName = item.name.trim() || `Location ${index + 1}`
-      const slug = slugify(displayName)
+  if (payload.eventMode === "locations" || payload.eventMode === "both") {
+    const zoneRows = payload.locations
+      .filter((item) => item.venueZoneId)
+      .map((item, index) => {
+        const displayName = item.name.trim() || `Location ${index + 1}`
+        const slug = slugify(displayName)
 
-      return {
-        event_id: payload.eventId,
-        venue_id: venueId,
-        venue_zone_id: item.venueZoneId,
-        code: zoneCodeFromName(displayName, index),
-        name: displayName,
-        slug: slug || null,
-        description: item.description.trim() || null,
-        zone_type: "table",
-        access_type: "reservation",
-        capacity: toNullableInteger(item.capacity),
-        min_guests: toNullableInteger(item.minGuests),
-        max_guests: toNullableInteger(item.maxGuests),
-        base_price: toNullableNumber(item.price),
-        deposit_amount: toNullableNumber(item.depositAmount),
-        minimum_spend: toNullableNumber(item.minimumSpend),
-        currency: "USD",
-        status: item.status === "ended" ? "inactive" : "active",
-        inventory_mode: "single",
-        display_order: index,
-        image_url: null,
-        notes: null,
-        metadata: {
-          source: "event-create-details",
-          bookingStart: item.bookingStart || null,
-          bookingEnd: item.bookingEnd || null,
-          quantityVisible: item.quantityVisible,
-          localDraftId: item.id,
-        },
-        is_active: item.status !== "ended",
-        updated_at: payload.updatedAt,
-      }
-    })
+        return {
+          event_id: payload.eventId,
+          venue_id: venueId,
+          venue_zone_id: item.venueZoneId,
+          code: zoneCodeFromName(displayName, index),
+          name: displayName,
+          slug: slug || null,
+          description: item.description.trim() || null,
+          zone_type: "table",
+          access_type: "reservation",
+          capacity: toNullableInteger(item.capacity),
+          min_guests: toNullableInteger(item.minGuests),
+          max_guests: toNullableInteger(item.maxGuests),
+          base_price: toNullableNumber(item.price),
+          deposit_amount: toNullableNumber(item.depositAmount),
+          minimum_spend: toNullableNumber(item.minimumSpend),
+          currency: "USD",
+          status: item.status === "ended" ? "inactive" : "active",
+          inventory_mode: "single",
+          display_order: index,
+          image_url: null,
+          notes: null,
+          metadata: {
+            source: "event-create-details",
+            bookingStart: item.bookingStart || null,
+            bookingEnd: item.bookingEnd || null,
+            quantityVisible: item.quantityVisible,
+            localDraftId: item.id,
+          },
+          is_active: item.status !== "ended",
+          updated_at: payload.updatedAt,
+        }
+      })
 
   const { error: deleteZonesError } = await supabase
     .from("event_zones")
@@ -1533,6 +1536,7 @@ async function saveInventoryDraftToEvent(
       throw new Error(`Could not save locations: ${insertZonesError.message}`)
     }
   }
+}
 
   // ----------------------------
   // SAVE PROMO CODES -> promo_codes
@@ -1646,6 +1650,75 @@ export default function AdminSignupEventDetailsPage() {
   const [saveError, setSaveError] = useState("")
   const [copiedLink, setCopiedLink] = useState("")
   const saveTimeoutRef = useRef<number | null>(null)
+  
+
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [publishMessage, setPublishMessage] = useState("")
+
+  async function publishEvent() {
+      if (!draftId) return
+
+      try {
+        setIsPublishing(true)
+        setSaveError("")
+        setPublishMessage("")
+
+        const { error } = await supabase
+        .from("events")
+        .update({
+            status: "scheduled",
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", draftId)
+
+        if (error) throw error
+
+        setEventContext((current) =>
+        current ? { ...current, status: "scheduled" } : current
+        )
+
+        setPublishMessage("Event published successfully.")
+      } catch (error) {
+        console.error("Publish event error:", error)
+        setSaveError("Could not publish event.")
+      } finally {
+        setIsPublishing(false)
+      }
+  }
+
+  async function handleSaveAndExit() {
+    if (!draft) return
+
+    try {
+      setIsSaving(true)
+      setSaveError("")
+
+      const record: EventDraftRecord = {
+        ...draft,
+        updatedAt: new Date().toISOString(),
+      }
+
+      setDraft(record)
+      writeDraft(record)
+
+      await saveInventoryDraftToEvent(supabase, {
+        eventId: record.id,
+        eventMode: record.basics.eventMode,
+        tickets: record.booking.tickets,
+        locations: record.booking.locations,
+        promoCodes: record.booking.promoCodes,
+        updatedAt: record.updatedAt,
+      })
+
+      router.push(`/admin/signup/hybrid/create?venueId=${eventContext?.venue_id || ""}`)
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Could not save booking details."
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   
   const copyLink = async (value: string) => {
@@ -1677,7 +1750,12 @@ export default function AdminSignupEventDetailsPage() {
   }, [])
 
   useEffect(() => {
-    if (!draftId) return
+  if (!draftId) return
+
+  let active = true
+
+  async function loadDraftFromDbAndStorage() {
+    setLoading(true)
 
     const stored = readDraft(draftId)
 
@@ -1686,11 +1764,142 @@ export default function AdminSignupEventDetailsPage() {
       return
     }
 
-    const nextDraft = normalizeDraft(stored)
+    const normalizedDraft = normalizeDraft(stored)
+
+    const { data: ticketRows, error: ticketError } = await supabase
+      .from("ticket_types")
+      .select(`
+        id,
+        name,
+        description,
+        price,
+        quantity_total,
+        is_visible,
+        status,
+        sales_status,
+        sale_start_at,
+        sale_end_at
+      `)
+      .eq("event_id", draftId)
+      .order("sort_order", { ascending: true })
+
+    if (!active) return
+
+    if (ticketError) {
+      console.error("Could not load ticket types:", ticketError.message)
+    }
+
+    const dbTickets: TicketItem[] =
+      ticketRows && ticketRows.length > 0
+        ? ticketRows.map((ticket) => ({
+            id: ticket.id,
+            name: ticket.name || "",
+            description: ticket.description || "",
+            price:
+              ticket.price === null || ticket.price === undefined
+                ? ""
+                : String(ticket.price),
+            quantity:
+              ticket.quantity_total === null || ticket.quantity_total === undefined
+                ? ""
+                : String(ticket.quantity_total),
+            quantityVisible: Boolean(ticket.is_visible),
+            status:
+              ticket.status === "ended"
+                ? "ended"
+                : ticket.status === "live"
+                  ? "live"
+                  : ticket.sales_status === "upcoming"
+                    ? "scheduled"
+                    : "draft",
+            salesStart: ticket.sale_start_at || "",
+            salesEnd: ticket.sale_end_at || "",
+          }))
+        : normalizedDraft.booking.tickets
+
+        const { data: locationRows, error: locationError } = await supabase
+      .from("event_zones")
+      .select(`
+        id,
+        venue_zone_id,
+        name,
+        description,
+        base_price,
+        capacity,
+        min_guests,
+        max_guests,
+        deposit_amount,
+        minimum_spend,
+        status,
+        metadata
+      `)
+      .eq("event_id", draftId)
+      .order("display_order", { ascending: true })
+
+    if (!active) return
+
+    if (locationError) {
+      console.error("Could not load event zones:", locationError.message)
+    }
+
+    const dbLocations: LocationItem[] =
+      locationRows && locationRows.length > 0
+        ? locationRows.map((zone) => ({
+            id: zone.id,
+            venueZoneId: zone.venue_zone_id || "",
+            name: zone.name || "",
+            description: zone.description || "",
+            price:
+              zone.base_price === null || zone.base_price === undefined
+                ? ""
+                : String(zone.base_price),
+            capacity:
+              zone.capacity === null || zone.capacity === undefined
+                ? ""
+                : String(zone.capacity),
+            minGuests:
+              zone.min_guests === null || zone.min_guests === undefined
+                ? ""
+                : String(zone.min_guests),
+            maxGuests:
+              zone.max_guests === null || zone.max_guests === undefined
+                ? ""
+                : String(zone.max_guests),
+            depositAmount:
+              zone.deposit_amount === null || zone.deposit_amount === undefined
+                ? ""
+                : String(zone.deposit_amount),
+            minimumSpend:
+              zone.minimum_spend === null || zone.minimum_spend === undefined
+                ? ""
+                : String(zone.minimum_spend),
+            quantityVisible: Boolean(zone.metadata?.quantityVisible),
+            status: zone.status === "inactive" ? "ended" : "live",
+            bookingStart: zone.metadata?.bookingStart || "",
+            bookingEnd: zone.metadata?.bookingEnd || "",
+          }))
+        : normalizedDraft.booking.locations
+
+    const nextDraft: EventDraftRecord = {
+      ...normalizedDraft,
+      booking: {
+        ...normalizedDraft.booking,
+        tickets: dbTickets,
+        locations: dbLocations,
+        },
+    }
+
     setDraft(nextDraft)
     writeDraft(nextDraft)
     setLoading(false)
-  }, [draftId, router])
+  }
+
+  void loadDraftFromDbAndStorage()
+
+  return () => {
+    active = false
+  }
+}, [draftId, router ])
 
   useEffect(() => {
     let active = true
@@ -1702,7 +1911,7 @@ export default function AdminSignupEventDetailsPage() {
 
   const { data: eventRow, error: eventError } = await supabase
     .from("events")
-    .select("id, venue_id, slug, title, start_at, end_at, is_series")
+    .select("id, venue_id, slug, title, start_at, end_at, is_series, status")
     .eq("id", draftId)
     .single()
 
@@ -1755,6 +1964,8 @@ export default function AdminSignupEventDetailsPage() {
   if (saveTimeoutRef.current) {
     window.clearTimeout(saveTimeoutRef.current)
   }
+
+
 
   saveTimeoutRef.current = window.setTimeout(async () => {
     try {
@@ -1811,6 +2022,17 @@ export default function AdminSignupEventDetailsPage() {
   const mode = draft?.basics.eventMode ?? "both"
   const showTickets = mode === "tickets" || mode === "both"
   const showLocations = mode === "locations" || mode === "both"
+
+  const isPublished =
+    eventContext?.status === "scheduled" ||
+    eventContext?.status === "live" ||
+    eventContext?.status === "ended"
+
+  const publishButtonLabel = isPublished
+    ? "Published"
+    : isPublishing
+      ? "Publishing..."
+      : "Publish Event"
 
   const eventSlug = eventContext?.slug?.trim() || ""
   const singleOccurrenceDate =
@@ -2405,6 +2627,10 @@ const publicBookingHelper =
         fontSize: 13,
         fontWeight: 800,
         minWidth: 0,
+        border: "none",
+cursor: "pointer",
+fontFamily: "inherit",
+
         },
         footerPrimary: {
         flex: 1.25,
@@ -2572,10 +2798,10 @@ shareHelper: {
     <div style={styles.page}>
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
-          <Link href="/admin/signup/event/create" style={styles.backLink}>
+          <div style={styles.gfMark}>GL</div>
+          {/* <Link href="/admin/signup/event/create" style={styles.backLink}>
             Back
-          </Link>
+          </Link> */}
         </div>
 
         <section style={styles.contentWrap}>
@@ -2595,6 +2821,7 @@ shareHelper: {
                 <div style={styles.shareLinkShell}>
                     <div style={styles.shareLinkText}>{publicBookingLink}</div>
                 </div>
+                
 
                 <button
                   type="button"
@@ -2605,6 +2832,64 @@ shareHelper: {
                 >
                   {copiedLink === publicBookingLink ? "✓" : <CopyIcon />}
                 </button>
+                {/* <button
+                    type="button"
+                    onClick={publishEvent}
+                    disabled={isPublishing}
+                    style={{
+                        height: 48,
+                        borderRadius: 16,
+                        border: "none",
+                        background: "linear-gradient(135deg, #34D399 0%, #10B981 100%)",
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                        fontWeight: 900,
+                        padding: "0 18px",
+                        cursor: "pointer",
+                        boxShadow: "0 10px 24px rgba(16,185,129,0.25)",
+                        opacity: isPublishing ? 0.6 : 1,
+                    }}
+                    >
+                    {isPublishing ? "Publishing..." : "Publish Event"}
+                    </button> */}
+                    <button
+                        type="button"
+                        onClick={publishEvent}
+                        disabled={isPublishing || isPublished}
+                        style={{
+                            height: 48,
+                            borderRadius: 999,
+                            border: isPublished
+                            ? "1px solid rgba(16,185,129,0.24)"
+                            : "none",
+                            background: isPublished
+                            ? "rgba(16,185,129,0.12)"
+                            : "linear-gradient(135deg, #34D399 0%, #10B981 100%)",
+                            color: isPublished ? "#047857" : "#FFFFFF",
+                            fontSize: 14,
+                            fontWeight: 900,
+                            padding: "0 18px",
+                            cursor: isPublishing || isPublished ? "default" : "pointer",
+                            boxShadow: isPublished
+                            ? "none"
+                            : "0 10px 24px rgba(16,185,129,0.25)",
+                            opacity: isPublishing ? 0.65 : 1,
+                        }}
+                        >
+                        {publishButtonLabel}
+                    </button>
+                    {publishMessage ? (
+                    <div
+                        style={{
+                        marginTop: 10,
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: "#047857",
+                        }}
+                    >
+                        {publishMessage}
+                    </div>
+                    ) : null}
                 </div>
 
                 <div style={styles.shareHelper}>{publicBookingHelper}</div>
@@ -3217,14 +3502,14 @@ shareHelper: {
                   ) : null}
 
                   <WindowFields
-  label="Promo Active Window"
-  valueStart={promo.activeStart}
-  valueEnd={promo.activeEnd}
-  onChangeStart={(next) => updatePromoCode(promo.id, { activeStart: next })}
-  onChangeEnd={(next) => updatePromoCode(promo.id, { activeEnd: next })}
-  styles={styles}
-  isMobile={isCompact}
-/>
+                    label="Promo Active Window"
+                    valueStart={promo.activeStart}
+                    valueEnd={promo.activeEnd}
+                    onChangeStart={(next) => updatePromoCode(promo.id, { activeStart: next })}
+                    onChangeEnd={(next) => updatePromoCode(promo.id, { activeEnd: next })}
+                    styles={styles}
+                    isMobile={isCompact}
+                  />
                 </div>
               </div>
             ))}
@@ -3275,17 +3560,37 @@ shareHelper: {
 
           <section style={styles.stickyFooter}>
             <div style={styles.stickyBar}>
-              <Link href="/admin/signup/event/create" style={styles.footerGhostLink}>
-                Back
-              </Link>
-
               <button
+                type="button"
+                onClick={() => {
+                    if (eventContext?.venue_id) {
+                    router.push(`/admin/signup/event/create?eventId=${draftId}`)
+                    return
+                    }
+
+                    router.push("/admin/signup/event/create")
+                }}
+                style={styles.footerGhostLink}
+                >
+                Back
+              </button>
+
+              {/* <button
                 type="button"
                 style={styles.footerPrimary}
                 //onClick={() => router.push(`/admin/signup/event/create/${draft.id}/payment`)}
                 onClick={() =>router.push(`/admin/signup/hybrid/create?venueId=${eventContext?.venue_id || ""}`)}
                 >
                 Continue
+              </button> */}
+
+              <button
+                type="button"
+                style={styles.footerPrimary}
+                onClick={handleSaveAndExit}
+                disabled={isSaving}
+                >
+                {isSaving ? "Saving..." : "Save"}
               </button>
 
               <Link href="/admin/dashboard" style={styles.footerGhostLink}>

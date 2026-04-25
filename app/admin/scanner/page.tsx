@@ -244,7 +244,7 @@ function StatPill({
 }
 
 export default function AdminScannerPage() {
-  const scannerRegionId = "guestflow-scanner-region"
+  const scannerRegionId = "GuestLyst-scanner-region"
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const isStartingRef = useRef(false)
@@ -345,7 +345,7 @@ export default function AdminScannerPage() {
           status: "invalid",
           title: "Invalid Code",
           description:
-            "Please scan a valid GuestFlow QR code or enter a code manually.",
+            "Please scan a valid GuestLyst QR code or enter a code manually.",
         })
         return
       }
@@ -572,7 +572,7 @@ export default function AdminScannerPage() {
                   color: "#0F766E",
                 }}
               >
-                GuestFlow Scanner
+                GuestLyst Scanner
               </div>
 
               <div
@@ -1287,7 +1287,7 @@ export default function AdminScannerPage() {
                   color: "#64748B",
                 }}
               >
-                GuestFlow pass validated successfully. Review details below and
+                GuestLyst pass validated successfully. Review details below and
                 complete check-in.
               </div>
 
@@ -1388,7 +1388,7 @@ export default function AdminScannerPage() {
         }
 
         @media (max-width: 640px) {
-          #guestflow-scanner-region {
+          #GuestLyst-scanner-region {
             min-height: 220px !important;
           }
         }

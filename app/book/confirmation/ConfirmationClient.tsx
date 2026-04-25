@@ -300,7 +300,7 @@ export default function ConfirmationClient() {
 
   const reservationQrValue = useMemo(() => {
     if (!reservationCode) return ""
-    return `guestflow://reservation/${reservationCode}`
+    return `GuestLyst://reservation/${reservationCode}`
   }, [reservationCode])
 
   const passItems = useMemo(
@@ -776,7 +776,7 @@ export default function ConfirmationClient() {
                     }}
                   >
                     <QRCodeSVG
-                      value={`guestflow://pass/${activePass.qrCode || activePass.id}`}
+                      value={`GuestLyst://pass/${activePass.qrCode || activePass.id}`}
                       size={186}
                       bgColor="#FFFFFF"
                       fgColor={COLORS.text}

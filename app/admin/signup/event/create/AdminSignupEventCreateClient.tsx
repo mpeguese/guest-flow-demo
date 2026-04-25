@@ -1,4 +1,4 @@
-// app/admin/signup/event/create/page.tsx
+// app/admin/signup/event/create/AdminSignupEventCreateClient.tsx
 "use client"
 import { createPortal } from "react-dom"
 import { createClient } from "@/app/lib/supabase/client"
@@ -416,10 +416,10 @@ function createDraftId() {
 }
 
 function saveDraftToStorage(record: EventDraftRecord) {
-  const draftKey = `guestflow:eventDraft:${record.id}`
+  const draftKey = `GuestLyst:eventDraft:${record.id}`
   localStorage.setItem(draftKey, JSON.stringify(record))
 
-  const draftIndexKey = "guestflow:eventDraft:index"
+  const draftIndexKey = "GuestLyst:eventDraft:index"
   const existingIndexRaw = localStorage.getItem(draftIndexKey)
   const existingIndex: string[] = existingIndexRaw ? JSON.parse(existingIndexRaw) : []
 
@@ -2504,10 +2504,10 @@ export default function AdminSignupEventCreatePage() {
               WebkitBackdropFilter: "blur(20px)",
             }}
           >
-            GF
+            GL
           </div>
 
-          <Link
+          {/* <Link
             href={
               isEditMode && eventVenueId
               ? `/admin/dashboard?venueId=${eventVenueId}`
@@ -2521,7 +2521,7 @@ export default function AdminSignupEventCreatePage() {
             }}
           >
             Back
-          </Link>
+          </Link> */}
         </div>
 
         <div

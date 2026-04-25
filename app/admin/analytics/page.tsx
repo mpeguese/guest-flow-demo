@@ -826,7 +826,7 @@ export default function SalesAnalyticsPage() {
                 marginBottom: 8,
               }}
             >
-              GuestFlow Admin
+              GuestLyst Admin
             </div>
 
             <h1

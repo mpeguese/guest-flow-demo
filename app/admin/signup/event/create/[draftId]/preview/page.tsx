@@ -231,7 +231,7 @@ function LocationIcon() {
 }
 
 function readDraft(draftId: string): EventDraftRecord | null {
-  const raw = localStorage.getItem(`guestflow:eventDraft:${draftId}`)
+  const raw = localStorage.getItem(`GuestLyst:eventDraft:${draftId}`)
   return raw ? JSON.parse(raw) : null
 }
 
@@ -734,7 +734,7 @@ export default function AdminSignupEventPreviewPage() {
     <div style={styles.page}>
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
+          <div style={styles.gfMark}>GL</div>
           <Link href={`/admin/signup/event/create/${draft.id}/payment`} style={styles.backLink}>
             Back
           </Link>

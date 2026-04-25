@@ -46,7 +46,7 @@ export type ReservationRecord = {
   guestInfo?: ReservationGuestInfo
 }
 
-const STORAGE_KEY = "guestflow_latest_reservation"
+const STORAGE_KEY = "GuestLyst_latest_reservation"
 
 export function generateReservationCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

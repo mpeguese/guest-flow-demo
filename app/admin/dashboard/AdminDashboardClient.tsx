@@ -767,12 +767,12 @@ export default function AdminDashboardPage() {
   })
 
   const venueMapsHref = data.venue?.id
-    ? `/admin/signup/hybrid/create/map?venueId=${data.venue.id}`
-    : "/admin/signup/hybrid/create/map"
+    ? `/admin/signup/hybrid/create/map?venueId=${data.venue.id}&from=dashboard`
+    : "/admin/signup/hybrid/create/map&from=dashboard"
 
   const mappedZonesHref =
     data.latestMapId && data.venue?.id
-      ? `/admin/signup/hybrid/create/zones/${data.latestMapId}?venueId=${data.venue.id}`
+      ? `/admin/signup/hybrid/create/zones/${data.latestMapId}?venueId=${data.venue.id}&from=dashboard`
       : ""
 
   const glassCard: CSSProperties = {
@@ -884,7 +884,7 @@ export default function AdminDashboardPage() {
                   color: "#020617",
                 }}
               >
-                GuestFlow
+                GuestLyst
               </div>
               <div
                 style={{
@@ -1040,7 +1040,7 @@ export default function AdminDashboardPage() {
                 color: "#0F172A",
               }}
             >
-              {displayName || "GuestFlow Admin"}
+              {displayName || "GuestLyst Admin"}
             </div>
             <div
               style={{

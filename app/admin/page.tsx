@@ -411,7 +411,7 @@ export default function AdminEntryPage() {
           <div style={styles.heroContent}>
             <div style={styles.heroTop}>
               <div style={styles.topRow}>
-                <div style={styles.badge}>GuestFlow Admin</div>
+                <div style={styles.badge}>GuestLyst Admin</div>
                 <div
                   style={{
                     marginTop: 12,

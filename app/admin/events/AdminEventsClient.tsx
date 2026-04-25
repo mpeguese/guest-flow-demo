@@ -881,7 +881,7 @@ export default function EventsPage() {
                 marginBottom: 8,
               }}
             >
-              GuestFlow Admin
+              GuestLyst Admin
             </div>
 
             <h1
@@ -1157,7 +1157,7 @@ export default function EventsPage() {
               >
                 <div>
                   <strong style={{ color: "#0F172A" }}>Admin:</strong>{" "}
-                  {displayName || "GuestFlow Admin"}
+                  {displayName || "GuestLyst Admin"}
                 </div>
                 <div>
                   <strong style={{ color: "#0F172A" }}>Role:</strong>{" "}

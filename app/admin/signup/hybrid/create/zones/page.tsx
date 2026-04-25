@@ -676,7 +676,7 @@ export default function HybridZonesPage() {
 
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <div style={styles.gfMark}>GF</div>
+          <div style={styles.gfMark}>GL</div>
 
           <Link href="/admin/signup/hybrid/create/map" style={styles.backLink}>
             Back to Map
