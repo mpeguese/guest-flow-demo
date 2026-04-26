@@ -2507,21 +2507,6 @@ export default function AdminSignupEventCreatePage() {
             GL
           </div>
 
-          {/* <Link
-            href={
-              isEditMode && eventVenueId
-              ? `/admin/dashboard?venueId=${eventVenueId}`
-              : "/admin/signup?intent=event"
-            }
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#0F766E",
-              textDecoration: "none",
-            }}
-          >
-            Back
-          </Link> */}
         </div>
 
         <div

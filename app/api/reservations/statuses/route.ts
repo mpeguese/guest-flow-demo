@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js"
 
 type EventRow = {
   id: string
+  venue_id: string | null
 }
 
 type EventDateRow = {
@@ -12,15 +13,23 @@ type EventDateRow = {
   start_at: string | null
 }
 
-type TableAreaRow = {
+type ZoneRow = {
   id: string
-  map_zone_code: string | null
-  is_visible: boolean | null
+  status: string | null
+  is_active: boolean | null
 }
 
 type ReservationRow = {
-  table_area_id: string
-  status: "pending" | "confirmed" | "checked_in" | "cancelled" | "no_show" | "expired" | string
+  venue_zone_id: string | null
+  event_zone_id: string | null
+  status:
+    | "pending"
+    | "confirmed"
+    | "checked_in"
+    | "cancelled"
+    | "no_show"
+    | "expired"
+    | string
   hold_expires_at: string | null
   session: string | null
 }
@@ -74,18 +83,17 @@ export async function GET(req: NextRequest) {
 
     const eventResult = await supabase
       .from("events")
-      .select("id")
+      .select("id, venue_id")
       .eq("slug", eventSlug)
       .single<EventRow>()
 
     if (eventResult.error || !eventResult.data) {
-      return NextResponse.json(
-        { error: "Event not found." },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Event not found." }, { status: 404 })
     }
 
-    const eventId = eventResult.data.id
+    const event = eventResult.data
+    const eventId = event.id
+
     const { startIso, endIso } = getUtcDayBounds(dateKey)
 
     const eventDateResult = await supabase
@@ -113,40 +121,57 @@ export async function GET(req: NextRequest) {
     }
 
     const eventDateId = eventDateResult.data.id
+    const statuses: Record<string, "available" | "limited" | "booked"> = {}
 
-    const areasResult = await supabase
-      .from("table_areas")
-      .select("id, map_zone_code, is_visible")
+    const eventZonesResult = await supabase
+      .from("event_zones")
+      .select("id, status, is_active")
       .eq("event_id", eventId)
-      .eq("is_visible", true)
-      .returns<TableAreaRow[]>()
+      .returns<ZoneRow[]>()
 
-    if (areasResult.error || !areasResult.data) {
+    if (eventZonesResult.error) {
       return NextResponse.json(
         {
-          error: "Failed to fetch table areas.",
-          details: areasResult.error?.message,
+          error: "Failed to fetch event zones.",
+          details: eventZonesResult.error.message,
         },
         { status: 500 }
       )
     }
 
-    const areaIdToZoneCode = new Map<string, string>()
-    const statuses: Record<string, "available" | "limited" | "booked"> = {}
-
-    areasResult.data.forEach((area) => {
-      if (!area.map_zone_code) return
-      areaIdToZoneCode.set(area.id, area.map_zone_code)
-      statuses[area.map_zone_code] = "available"
+    ;(eventZonesResult.data || []).forEach((zone) => {
+      if (zone.is_active === false) return
+      if (zone.status === "inactive") return
+      statuses[zone.id] = "available"
     })
 
-    if (areaIdToZoneCode.size === 0) {
-      return NextResponse.json({ statuses })
+    if (event.venue_id) {
+      const venueZonesResult = await supabase
+        .from("venue_zones")
+        .select("id, status, is_active")
+        .eq("venue_id", event.venue_id)
+        .returns<ZoneRow[]>()
+
+      if (venueZonesResult.error) {
+        return NextResponse.json(
+          {
+            error: "Failed to fetch venue zones.",
+            details: venueZonesResult.error.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      ;(venueZonesResult.data || []).forEach((zone) => {
+        if (zone.is_active === false) return
+        if (zone.status === "inactive") return
+        statuses[zone.id] = "available"
+      })
     }
 
     let reservationsQuery = supabase
       .from("reservations")
-      .select("table_area_id, status, hold_expires_at, session")
+      .select("venue_zone_id, event_zone_id, status, hold_expires_at, session")
       .eq("event_id", eventId)
       .eq("event_date_id", eventDateId)
       .in("status", ["pending", "confirmed", "checked_in"])
@@ -170,14 +195,18 @@ export async function GET(req: NextRequest) {
     const now = new Date()
 
     ;(reservationsResult.data || []).forEach((reservation) => {
-      const zoneCode = areaIdToZoneCode.get(reservation.table_area_id)
-      if (!zoneCode) return
+      const zoneId = reservation.event_zone_id || reservation.venue_zone_id
+      if (!zoneId) return
+
+      if (!(zoneId in statuses)) {
+        statuses[zoneId] = "available"
+      }
 
       if (
         reservation.status === "confirmed" ||
         reservation.status === "checked_in"
       ) {
-        statuses[zoneCode] = "booked"
+        statuses[zoneId] = "booked"
         return
       }
 
@@ -186,8 +215,8 @@ export async function GET(req: NextRequest) {
           ? new Date(reservation.hold_expires_at)
           : null
 
-        if (expiresAt && expiresAt > now && statuses[zoneCode] !== "booked") {
-          statuses[zoneCode] = "limited"
+        if (expiresAt && expiresAt > now && statuses[zoneId] !== "booked") {
+          statuses[zoneId] = "limited"
         }
       }
     })

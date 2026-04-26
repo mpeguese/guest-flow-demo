@@ -15,7 +15,7 @@ import {
 } from "@/app/lib/booking-data"
 import {
   getEventBookingMetaBySlug,
-  getReservationStatusesForEventSlugAndDate,
+  //getReservationStatusesForEventSlugAndDate,
   getVenueZonesForEventSlug,
 } from "@/app/lib/booking-queries"
 import { passProducts } from "@/app/lib/book-pass-data"

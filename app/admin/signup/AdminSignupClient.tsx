@@ -1,9 +1,11 @@
 // app/admin/signup/AdminSignupClient.tsx
+// app/admin/signup/AdminSignupClient.tsx
 "use client"
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -36,6 +38,15 @@ function getIntentRoute(intent: IntentType) {
     default:
       return "/admin/signup/event/create"
   }
+}
+
+function makeBusinessSlug(value: string) {
+  return value
+    .trim()
+    .replace(/[’']/g, "")
+    .replace(/&/g, "and")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -88,8 +99,11 @@ export default function AdminSignupClient({
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
+  const [intent, setIntent] = useState<IntentType>("event")
+
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
+  const [businessName, setBusinessName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
@@ -97,6 +111,12 @@ export default function AdminSignupClient({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+
+  useEffect(() => {
+    setIntent(getIntentFromSearch(window.location.search))
+  }, [])
+
+  const isEventIntent = intent === "event"
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -106,8 +126,14 @@ export default function AdminSignupClient({
     setErrorMessage("")
     setSuccessMessage("")
 
+    const currentIntent =
+      typeof window !== "undefined"
+        ? getIntentFromSearch(window.location.search)
+        : intent
+
     const trimmedFirstName = firstName.trim()
     const trimmedLastName = lastName.trim()
+    const trimmedBusinessName = businessName.trim()
     const trimmedEmail = email.trim().toLowerCase()
 
     if (!trimmedFirstName) {
@@ -117,6 +143,11 @@ export default function AdminSignupClient({
 
     if (!trimmedLastName) {
       setErrorMessage("Please enter your last name.")
+      return
+    }
+
+    if (currentIntent === "event" && !trimmedBusinessName) {
+      setErrorMessage("Please enter your business or organizer name.")
       return
     }
 
@@ -133,14 +164,8 @@ export default function AdminSignupClient({
     setIsSubmitting(true)
 
     try {
-      const intent =
-        typeof window !== "undefined"
-          ? getIntentFromSearch(window.location.search)
-          : "event"
-
-      const profileRole = intent === "hybrid" ? "venue_admin" : "promoter"
-
-      const route = getIntentRoute(intent)
+      const profileRole = currentIntent === "hybrid" ? "venue_admin" : "promoter"
+      const route = getIntentRoute(currentIntent)
 
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -149,7 +174,7 @@ export default function AdminSignupClient({
           data: {
             first_name: trimmedFirstName,
             last_name: trimmedLastName,
-            signup_intent: intent,
+            signup_intent: currentIntent,
           },
         },
       })
@@ -164,7 +189,6 @@ export default function AdminSignupClient({
         return
       }
 
-      // Create matching public.profiles row using the same UUID as auth.users.id
       const profilePayload = {
         id: data.user.id,
         first_name: trimmedFirstName,
@@ -185,14 +209,74 @@ export default function AdminSignupClient({
         return
       }
 
-      // If signup returned a session, continue immediately into the selected flow.
+      if (currentIntent === "event") {
+        const businessSlug = makeBusinessSlug(trimmedBusinessName)
+
+        if (!businessSlug) {
+          setErrorMessage("Please enter a valid business or organizer name.")
+          return
+        }
+
+        const { data: existingBusinessLink, error: existingBusinessLinkError } =
+          await supabase
+            .from("business_admins")
+            .select("business_id")
+            .eq("user_id", data.user.id)
+            .order("is_primary", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (existingBusinessLinkError) {
+          setErrorMessage(
+            `Your account was created, but we could not check your business setup: ${existingBusinessLinkError.message}`
+          )
+          return
+        }
+
+        if (!existingBusinessLink?.business_id) {
+          const { data: business, error: businessError } = await supabase
+            .from("businesses")
+            .insert({
+              name: trimmedBusinessName,
+              slug: businessSlug,
+              legal_name: trimmedBusinessName,
+              business_type: "other",
+              contact_email: trimmedEmail,
+              created_by: data.user.id,
+            })
+            .select("id")
+            .single()
+
+          if (businessError) {
+            setErrorMessage(
+              `Your account was created, but your business could not be initialized: ${businessError.message}`
+            )
+            return
+          }
+
+          const { error: businessAdminError } = await supabase
+            .from("business_admins")
+            .insert({
+              business_id: business.id,
+              user_id: data.user.id,
+              is_primary: true,
+            })
+
+          if (businessAdminError) {
+            setErrorMessage(
+              `Your account and business were created, but your admin access could not be linked: ${businessAdminError.message}`
+            )
+            return
+          }
+        }
+      }
+
       if (data.session) {
         setSuccessMessage("Account created. Redirecting...")
         router.push(route)
         return
       }
 
-      // Fallback message in case project settings change later and no session is returned.
       setErrorMessage(
         "Your account and profile were created, but no active session was returned. Check your Supabase email confirmation settings."
       )
@@ -323,6 +407,12 @@ export default function AdminSignupClient({
       color: "#0f172a",
       outline: "none",
       boxSizing: "border-box",
+    },
+    helperText: {
+      marginTop: 8,
+      fontSize: 13,
+      lineHeight: 1.45,
+      color: "#64748b",
     },
     passwordWrap: {
       position: "relative",
@@ -503,6 +593,24 @@ export default function AdminSignupClient({
                   autoComplete="family-name"
                 />
               </div>
+
+              {isEventIntent ? (
+                <div style={styles.fieldWrapFull} className="admin-signup-full">
+                  <label style={styles.fieldLabel}>Business / Organizer Name</label>
+                  <input
+                    style={styles.fieldInput}
+                    type="text"
+                    placeholder="Your LLC, DBA, promoter name, or event brand"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    autoComplete="organization"
+                  />
+                  <div style={styles.helperText}>
+                    This is used for event ownership, payments, scanner access, and
+                    analytics.
+                  </div>
+                </div>
+              ) : null}
 
               <div style={styles.fieldWrapFull} className="admin-signup-full">
                 <label style={styles.fieldLabel}>Email</label>

@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const { data: reservation, error: findError } = await supabase
       .from("reservations")
       .select(
-        "id, status, confirmed_at, cancelled_at, expired_at, hold_expires_at, table_area_id"
+        "id, status, confirmed_at, cancelled_at, expired_at, hold_expires_at, venue_zone_id, event_zone_id, zone_source"
       )
       .eq("id", reservationId)
       .maybeSingle()
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", reservation.id)
       .select(
-        "id, status, confirmed_at, cancelled_at, expired_at, hold_expires_at, table_area_id"
+        "id, status, confirmed_at, cancelled_at, expired_at, hold_expires_at, venue_zone_id, event_zone_id, zone_source"
       )
       .single()
 

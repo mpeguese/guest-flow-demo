@@ -87,7 +87,8 @@ type DbEventDateRow = {
 }
 
 type DbReservationRow = {
-  table_area_id: string
+  venue_zone_id: string | null
+  event_zone_id: string | null
   status:
     | "pending"
     | "confirmed"
@@ -100,10 +101,10 @@ type DbReservationRow = {
   session: string | null
 }
 
-type DbTableAreaStatusRow = {
+type DbStatusZoneRow = {
   id: string
-  map_zone_code: string | null
-  is_visible: boolean | null
+  status: string | null
+  is_active: boolean | null
 }
 
 type DbVenueMapRow = {
@@ -806,9 +807,9 @@ export async function getReservationStatusesForEventSlugAndDate(
 
   const eventResult = await supabase
     .from("events")
-    .select("id")
+    .select("id, venue_id")
     .eq("slug", eventSlug)
-    .single<{ id: string }>()
+    .single<{ id: string; venue_id: string | null }>()
 
   if (eventResult.error || !eventResult.data) {
     console.error(
@@ -819,6 +820,7 @@ export async function getReservationStatusesForEventSlugAndDate(
   }
 
   const eventId = eventResult.data.id
+  const venueId = eventResult.data.venue_id
   const { startIso, endIso } = getUtcDayBounds(dateKey)
 
   const eventDateResult = await supabase
@@ -850,38 +852,51 @@ export async function getReservationStatusesForEventSlugAndDate(
   }
 
   const eventDateId = eventDateResult.data.id
-
-  const areasResult = await supabase
-    .from("table_areas")
-    .select("id, map_zone_code, is_visible")
-    .eq("event_id", eventId)
-    .eq("is_visible", true)
-    .returns<DbTableAreaStatusRow[]>()
-
-  if (areasResult.error || !areasResult.data) {
-    console.error(
-      "Failed to fetch table areas for reservation statuses:",
-      areasResult.error?.message
-    )
-    return {}
-  }
-
-  const areaIdToZoneCode = new Map<string, string>()
   const statusMap: ReservationStatusMap = {}
 
-  areasResult.data.forEach((area) => {
-    if (!area.map_zone_code) return
-    areaIdToZoneCode.set(area.id, area.map_zone_code)
-    statusMap[area.map_zone_code] = "available"
+  const eventZonesResult = await supabase
+    .from("event_zones")
+    .select("id, status, is_active")
+    .eq("event_id", eventId)
+    .returns<DbStatusZoneRow[]>()
+
+  if (eventZonesResult.error) {
+    console.error(
+      "Failed to fetch event zones for reservation statuses:",
+      eventZonesResult.error.message
+    )
+  }
+
+  ;(eventZonesResult.data || []).forEach((zone) => {
+    if (zone.is_active === false) return
+    if (zone.status === "inactive") return
+    statusMap[zone.id] = "available"
   })
 
-  if (areaIdToZoneCode.size === 0) {
-    return statusMap
+  if (venueId) {
+    const venueZonesResult = await supabase
+      .from("venue_zones")
+      .select("id, status, is_active")
+      .eq("venue_id", venueId)
+      .returns<DbStatusZoneRow[]>()
+
+    if (venueZonesResult.error) {
+      console.error(
+        "Failed to fetch venue zones for reservation statuses:",
+        venueZonesResult.error.message
+      )
+    }
+
+    ;(venueZonesResult.data || []).forEach((zone) => {
+      if (zone.is_active === false) return
+      if (zone.status === "inactive") return
+      statusMap[zone.id] = "available"
+    })
   }
 
   let reservationsQuery = supabase
     .from("reservations")
-    .select("table_area_id, status, hold_expires_at, session")
+    .select("venue_zone_id, event_zone_id, status, hold_expires_at, session")
     .eq("event_id", eventId)
     .eq("event_date_id", eventDateId)
     .in("status", ["pending", "confirmed", "checked_in"])
@@ -903,14 +918,18 @@ export async function getReservationStatusesForEventSlugAndDate(
   const now = new Date()
 
   reservationsResult.data.forEach((reservation) => {
-    const zoneCode = areaIdToZoneCode.get(reservation.table_area_id)
-    if (!zoneCode) return
+    const zoneId = reservation.event_zone_id || reservation.venue_zone_id
+    if (!zoneId) return
+
+    if (!(zoneId in statusMap)) {
+      statusMap[zoneId] = "available"
+    }
 
     if (
       reservation.status === "confirmed" ||
       reservation.status === "checked_in"
     ) {
-      statusMap[zoneCode] = "booked"
+      statusMap[zoneId] = "booked"
       return
     }
 
@@ -919,8 +938,8 @@ export async function getReservationStatusesForEventSlugAndDate(
         ? new Date(reservation.hold_expires_at)
         : null
 
-      if (expiresAt && expiresAt > now && statusMap[zoneCode] !== "booked") {
-        statusMap[zoneCode] = "limited"
+      if (expiresAt && expiresAt > now && statusMap[zoneId] !== "booked") {
+        statusMap[zoneId] = "limited"
       }
     }
   })

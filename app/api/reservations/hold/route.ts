@@ -4,30 +4,33 @@ import { createClient } from "@supabase/supabase-js"
 
 type HoldRequestBody = {
   eventSlug?: string
-
-  // current client payload
   eventDate?: string
   zoneId?: string
   partySize?: number | null
   price?: number | null
-
-  // optional / legacy compatibility
   date?: string
-  tableAreaId?: string
   guestCount?: number | null
-
   session?: string | null
   userId?: string | null
 }
 
 type EventRow = {
   id: string
+  venue_id: string | null
 }
 
 type EventDateRow = {
   id: string
   event_id: string
   start_at: string | null
+}
+
+type ReservationZoneSource = "event_zone" | "venue_zone"
+
+type ResolvedZone = {
+  id: string
+  source: ReservationZoneSource
+  name: string | null
 }
 
 type BlockingReservationRow = {
@@ -41,13 +44,6 @@ type BlockingReservationRow = {
     | "no_show"
     | string
   hold_expires_at: string | null
-}
-
-type TableAreaLookupRow = {
-  id: string
-  event_id: string
-  name: string | null
-  map_zone_code: string | null
 }
 
 function getUtcDayBounds(dateKey: string) {
@@ -69,17 +65,9 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as HoldRequestBody
 
-    console.log("hold route payload", body)
-
     const eventSlug = String(body.eventSlug || "").trim()
-
-    // support both new and legacy client field names
     const dateKey = String(body.eventDate || body.date || "").trim()
-
-    // In the current client flow, zoneId is actually the map_zone_code.
     const zoneId = String(body.zoneId || "").trim()
-    const legacyTableAreaId = String(body.tableAreaId || "").trim()
-
     const session = body.session?.trim() || null
 
     const guestCountSource =
@@ -92,15 +80,6 @@ export async function POST(req: Request) {
     const guestCount = Math.max(1, Math.floor(guestCountSource))
     const userId = body.userId?.trim() || null
 
-    console.log("hold route normalized values", {
-      eventSlug,
-      dateKey,
-      zoneId,
-      legacyTableAreaId,
-      guestCount,
-      session,
-    })
-
     if (!eventSlug) {
       return NextResponse.json({ error: "Missing eventSlug." }, { status: 400 })
     }
@@ -112,11 +91,8 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!zoneId && !legacyTableAreaId) {
-      return NextResponse.json(
-        { error: "Missing zoneId/tableAreaId." },
-        { status: 400 }
-      )
+    if (!zoneId) {
+      return NextResponse.json({ error: "Missing zoneId." }, { status: 400 })
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -133,10 +109,9 @@ export async function POST(req: Request) {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    // 1) Resolve event by slug
     const eventResult = await supabase
       .from("events")
-      .select("id")
+      .select("id, venue_id")
       .eq("slug", eventSlug)
       .single<EventRow>()
 
@@ -144,9 +119,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 })
     }
 
-    const eventId = eventResult.data.id
+    const event = eventResult.data
+    const eventId = event.id
 
-    // 2) Resolve event_dates row by calendar day
     const { startIso, endIso } = getUtcDayBounds(dateKey)
 
     const eventDateResult = await supabase
@@ -178,76 +153,104 @@ export async function POST(req: Request) {
 
     const eventDateId = eventDateResult.data.id
 
-    // 3) Resolve the actual table_areas.id
-    // Current client sends map_zone_code as zoneId, but older code may send tableAreaId UUID.
-    let resolvedTableArea: TableAreaLookupRow | null = null
+    let resolvedZone: ResolvedZone | null = null
 
-    if (legacyTableAreaId) {
-      const tableAreaByIdResult = await supabase
-        .from("table_areas")
-        .select("id, event_id, name, map_zone_code")
-        .eq("id", legacyTableAreaId)
-        .eq("event_id", eventId)
-        .maybeSingle<TableAreaLookupRow>()
+    const eventZoneResult = await supabase
+      .from("event_zones")
+      .select("id, name, status, is_active")
+      .eq("event_id", eventId)
+      .eq("id", zoneId)
+      .maybeSingle<{
+        id: string
+        name: string | null
+        status: string | null
+        is_active: boolean | null
+      }>()
 
-      if (tableAreaByIdResult.error) {
-        return NextResponse.json(
-          {
-            error: "Failed to resolve table area by id.",
-            details: tableAreaByIdResult.error.message,
-          },
-          { status: 500 }
-        )
-      }
-
-      resolvedTableArea = tableAreaByIdResult.data ?? null
-    }
-
-    if (!resolvedTableArea && zoneId) {
-      const tableAreaByZoneCodeResult = await supabase
-        .from("table_areas")
-        .select("id, event_id, name, map_zone_code")
-        .eq("event_id", eventId)
-        .eq("map_zone_code", zoneId)
-        .maybeSingle<TableAreaLookupRow>()
-
-      if (tableAreaByZoneCodeResult.error) {
-        return NextResponse.json(
-          {
-            error: "Failed to resolve table area by zone code.",
-            details: tableAreaByZoneCodeResult.error.message,
-          },
-          { status: 500 }
-        )
-      }
-
-      resolvedTableArea = tableAreaByZoneCodeResult.data ?? null
-    }
-
-    if (!resolvedTableArea) {
+    if (eventZoneResult.error) {
       return NextResponse.json(
-        { error: "Table area not found for this event." },
+        {
+          error: "Failed to resolve event zone.",
+          details: eventZoneResult.error.message,
+        },
+        { status: 500 }
+      )
+    }
+
+    if (
+      eventZoneResult.data &&
+      eventZoneResult.data.is_active !== false &&
+      eventZoneResult.data.status !== "inactive"
+    ) {
+      resolvedZone = {
+        id: eventZoneResult.data.id,
+        source: "event_zone",
+        name: eventZoneResult.data.name,
+      }
+    }
+
+    if (!resolvedZone) {
+      if (!event.venue_id) {
+        return NextResponse.json(
+          { error: "Event is missing venue_id." },
+          { status: 500 }
+        )
+      }
+
+      const venueZoneResult = await supabase
+        .from("venue_zones")
+        .select("id, name, status, is_active")
+        .eq("venue_id", event.venue_id)
+        .eq("id", zoneId)
+        .maybeSingle<{
+          id: string
+          name: string | null
+          status: string | null
+          is_active: boolean | null
+        }>()
+
+      if (venueZoneResult.error) {
+        return NextResponse.json(
+          {
+            error: "Failed to resolve venue zone.",
+            details: venueZoneResult.error.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      if (
+        venueZoneResult.data &&
+        venueZoneResult.data.is_active !== false &&
+        venueZoneResult.data.status !== "inactive"
+      ) {
+        resolvedZone = {
+          id: venueZoneResult.data.id,
+          source: "venue_zone",
+          name: venueZoneResult.data.name,
+        }
+      }
+    }
+
+    if (!resolvedZone) {
+      return NextResponse.json(
+        { error: "Zone not found for this event." },
         { status: 404 }
       )
     }
 
-    const tableAreaId = resolvedTableArea.id
-
-    console.log("resolved table area", {
-      zoneId,
-      tableAreaId,
-      mapZoneCode: resolvedTableArea.map_zone_code,
-      tableAreaName: resolvedTableArea.name,
-    })
-
-    // 4) Check for blocking reservations
     let blockingQuery = supabase
       .from("reservations")
       .select("id, status, hold_expires_at")
       .eq("event_id", eventId)
       .eq("event_date_id", eventDateId)
-      .eq("table_area_id", tableAreaId)
       .in("status", ["pending", "confirmed", "checked_in"])
+
+    if (resolvedZone.source === "event_zone") {
+      blockingQuery = blockingQuery.eq("event_zone_id", resolvedZone.id)
+    } else {
+      blockingQuery = blockingQuery.eq("venue_zone_id", resolvedZone.id)
+    }
 
     if (session) {
       blockingQuery = blockingQuery.eq("session", session)
@@ -257,7 +260,10 @@ export async function POST(req: Request) {
 
     if (blockingResult.error) {
       return NextResponse.json(
-        { error: "Failed to check existing reservations." },
+        {
+          error: "Failed to check existing reservations.",
+          details: blockingResult.error.message,
+        },
         { status: 500 }
       )
     }
@@ -288,14 +294,16 @@ export async function POST(req: Request) {
       )
     }
 
-    // 5) Create pending hold
     const holdExpiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
 
     const insertPayload = {
       order_id: null,
       event_id: eventId,
       event_date_id: eventDateId,
-      table_area_id: tableAreaId,
+      table_area_id: null,
+      venue_zone_id: resolvedZone.source === "venue_zone" ? resolvedZone.id : null,
+      event_zone_id: resolvedZone.source === "event_zone" ? resolvedZone.id : null,
+      zone_source: resolvedZone.source,
       user_id: userId,
       guest_name: null,
       phone: null,
@@ -319,7 +327,9 @@ export async function POST(req: Request) {
     const insertResult = await supabase
       .from("reservations")
       .insert(insertPayload)
-      .select("id, event_id, event_date_id, table_area_id, status, hold_expires_at")
+      .select(
+        "id, event_id, event_date_id, venue_zone_id, event_zone_id, zone_source, status, hold_expires_at"
+      )
       .single()
 
     if (insertResult.error || !insertResult.data) {
@@ -338,14 +348,18 @@ export async function POST(req: Request) {
         id: insertResult.data.id,
         event_id: insertResult.data.event_id,
         event_date_id: insertResult.data.event_date_id,
-        table_area_id: insertResult.data.table_area_id,
+        venue_zone_id: insertResult.data.venue_zone_id,
+        event_zone_id: insertResult.data.event_zone_id,
+        zone_source: insertResult.data.zone_source,
         status: insertResult.data.status,
         expires_at: insertResult.data.hold_expires_at,
       },
       reservationId: insertResult.data.id,
       eventId: insertResult.data.event_id,
       eventDateId: insertResult.data.event_date_id,
-      tableAreaId: insertResult.data.table_area_id,
+      venueZoneId: insertResult.data.venue_zone_id,
+      eventZoneId: insertResult.data.event_zone_id,
+      zoneSource: insertResult.data.zone_source,
       status: insertResult.data.status,
       holdExpiresAt: insertResult.data.hold_expires_at,
       expiresAt: insertResult.data.hold_expires_at,
