@@ -15,6 +15,7 @@ import {
   inferReservationItemType,
   normalizeReservationItem,
 } from "@/app/lib/reservation-confirmation"
+import { supabase } from "@/app/lib/supabase"
 
 function formatDate(dateKey: string) {
   if (!dateKey) return "Not selected"
@@ -139,6 +140,8 @@ export default function ConfirmationClient() {
   const [redirectStatus, setRedirectStatus] = useState("")
   const [confirmationError, setConfirmationError] = useState("")
   const [isConfirming, setIsConfirming] = useState(false)
+
+  const [savingGuestInfo, setSavingGuestInfo] = useState(false)
 
   const didInitializeRef = useRef(false)
   const touchStartXRef = useRef<number | null>(null)
@@ -377,18 +380,70 @@ export default function ConfirmationClient() {
     touchDeltaXRef.current = 0
   }
 
-  function handleSaveGuestInfo() {
-    updateLatestReservationGuestInfo({
-      firstName,
-      lastName,
-      email,
-      phone,
-      marketingOptIn,
-    })
+  async function handleSaveGuestInfo() {
+    const reservationIds = completedItems
+      .map((item) => item.reservationId)
+      .filter((value): value is string => Boolean(value))
 
-    setSavedMessage("Details saved. You can use them later to retrieve your reservation.")
-    window.setTimeout(() => setSavedMessage(""), 2600)
-  }
+    if (reservationIds.length === 0) {
+      setSavedMessage("We could not find a reservation to update.")
+      window.setTimeout(() => setSavedMessage(""), 2600)
+      return
+    }
+
+    setSavingGuestInfo(true)
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const response = await fetch("/api/reservations/guest-info", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          reservationIds,
+          firstName,
+          lastName,
+          email,
+          phone,
+          marketingOptIn,
+        }),
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to save guest details.")
+      }
+
+      updateLatestReservationGuestInfo({
+        firstName,
+        lastName,
+        email,
+        phone,
+        marketingOptIn,
+      })
+
+      setSavedMessage(
+        data?.userId
+          ? "Details saved to your profile and reservation."
+          : "Details saved to your reservation."
+      )
+    } catch (error) {
+      setSavedMessage(
+        error instanceof Error ? error.message : "Unable to save guest details."
+      )
+    } finally {
+      setSavingGuestInfo(false)
+      window.setTimeout(() => setSavedMessage(""), 2600)
+    }
+}
 
   if (isConfirming) {
     return (
@@ -1116,24 +1171,34 @@ export default function ConfirmationClient() {
               >
                 <button
                   onClick={handleSaveGuestInfo}
+                  disabled={savingGuestInfo}
                   style={{
                     flex: 1,
                     height: 42,
                     border: "none",
                     borderRadius: 16,
-                    background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                    background: savingGuestInfo
+                      ? COLORS.border
+                      : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
                     color: "#fff",
                     fontWeight: 800,
                     fontSize: 13,
-                    cursor: "pointer",
-                    boxShadow: "0 10px 20px rgba(14,165,233,0.22)",
+                    cursor: savingGuestInfo ? "not-allowed" : "pointer",
+                    boxShadow: savingGuestInfo ? "none" : "0 10px 20px rgba(14,165,233,0.22)",
                   }}
                 >
-                  Save Details
+                  {savingGuestInfo ? "Saving..." : "Save Details"}
                 </button>
 
                 <button
-                  onClick={() => router.push("/book")}
+                  onClick={() => {
+                    const lastMapHref =
+                      typeof window !== "undefined"
+                        ? window.sessionStorage.getItem("gf-last-map-href")
+                        : null
+
+                    router.push(lastMapHref || "/book/map")
+                  }}
                   style={{
                     flex: 1,
                     height: 42,

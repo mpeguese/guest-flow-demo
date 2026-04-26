@@ -5,6 +5,7 @@ import { ChangeEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import MobileShell from "@/app/components/booking/MobileShell"
 import { supabase } from "../lib/supabase"
+import { QRCodeSVG } from "qrcode.react"
 
 const COLORS = {
   bg: "#FFFFFF",
@@ -57,6 +58,26 @@ type ProfileRow = {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+type RetrievedReservation = {
+  id: string
+  reservationCode: string
+  status: string
+  guestName: string | null
+  email: string | null
+  phone: string | null
+  userId: string | null
+  eventTitle: string
+  eventSlug: string | null
+  eventDate: string | null
+  zoneName: string | null
+  zoneCode: string | null
+  guestCount: number | null
+  session: string | null
+  amountPaid: number
+  confirmedAt: string | null
+  createdAt: string | null
 }
 
 function splitStoredPhone(phone: string | null) {
@@ -207,6 +228,341 @@ function ExpandIcon() {
   )
 }
 
+function formatReservationDate(value: string | null) {
+  if (!value) return "Date TBA"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Date TBA"
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  }).format(date)
+}
+
+function money(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value || 0)
+}
+
+function ReservationMiniCard({
+  reservation,
+  action,
+  onShowQr,
+}: {
+  reservation: RetrievedReservation
+  action?: React.ReactNode
+  onShowQr?: () => void
+}) {
+  const canShowQr =
+    reservation.status === "confirmed" && Boolean(reservation.reservationCode)
+
+  return (
+    <div
+      onClick={canShowQr ? onShowQr : undefined}
+      role={canShowQr ? "button" : undefined}
+      tabIndex={canShowQr ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!canShowQr || !onShowQr) return
+
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onShowQr()
+        }
+      }}
+      style={{
+        marginTop: 14,
+        padding: 14,
+        borderRadius: 20,
+        border: `1px solid ${COLORS.border}`,
+        background: "rgba(255,255,255,0.88)",
+        boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+        cursor: canShowQr ? "pointer" : "default",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 0.8,
+              color: COLORS.textMuted,
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            {reservation.status || "Reservation"}
+          </div>
+
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 950,
+              lineHeight: 1.15,
+              color: COLORS.text,
+              letterSpacing: -0.4,
+            }}
+          >
+            {reservation.eventTitle || "Event"}
+          </div>
+
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 13,
+              lineHeight: 1.45,
+              color: COLORS.textSoft,
+            }}
+          >
+            {formatReservationDate(reservation.eventDate)}
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: "7px 9px",
+            borderRadius: 999,
+            background:
+              reservation.status === "confirmed"
+                ? COLORS.accentSoft
+                : COLORS.goldSoft,
+            color:
+              reservation.status === "confirmed"
+                ? "#0F766E"
+                : "#B45309",
+            fontSize: 11,
+            fontWeight: 900,
+            whiteSpace: "nowrap",
+            textTransform: "uppercase",
+          }}
+        >
+          {reservation.status}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 12,
+          display: "grid",
+          gap: 5,
+          fontSize: 13,
+          color: COLORS.textSoft,
+          lineHeight: 1.45,
+        }}
+      >
+        <div>
+          <strong style={{ color: COLORS.text }}>Code:</strong>{" "}
+          {reservation.reservationCode || "Not assigned"}
+        </div>
+        <div>
+          <strong style={{ color: COLORS.text }}>Location:</strong>{" "}
+          {reservation.zoneName || reservation.zoneCode || "Location TBA"}
+        </div>
+        <div>
+          <strong style={{ color: COLORS.text }}>Guests:</strong>{" "}
+          {reservation.guestCount || 1}
+        </div>
+        <div>
+          <strong style={{ color: COLORS.text }}>Paid:</strong>{" "}
+          {money(reservation.amountPaid)}
+        </div>
+      </div>
+
+      {canShowQr ? (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            //borderRadius: 16,
+            //background: COLORS.primarySoft,
+            color: COLORS.primaryHover,
+            fontSize: 13,
+            fontWeight: 900,
+            textAlign: "center",
+          }}
+        >
+          Tap to show QR code
+        </div>
+      ) : null}
+
+      {action ? <div style={{ marginTop: 14 }}>{action}</div> : null}
+    </div>
+  )
+}
+
+function ReservationQrModal({
+  reservation,
+  onClose,
+}: {
+  reservation: RetrievedReservation | null
+  onClose: () => void
+}) {
+  if (!reservation) return null
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 120,
+        background: "rgba(2,6,23,0.72)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 360,
+          borderRadius: 28,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          boxShadow: "0 28px 70px rgba(0,0,0,0.28)",
+          padding: 22,
+          textAlign: "center",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close QR code"
+          title="Close QR code"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 999,
+            border: `1px solid ${COLORS.border}`,
+            background: "rgba(255,255,255,0.92)",
+            color: COLORS.text,
+            fontSize: 22,
+            fontWeight: 800,
+            cursor: "pointer",
+            float: "right",
+          }}
+        >
+          ×
+        </button>
+
+        <div
+          style={{
+            clear: "both",
+            fontSize: 12,
+            fontWeight: 900,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: COLORS.textMuted,
+            marginBottom: 8,
+          }}
+        >
+          Ready to Scan
+        </div>
+
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 950,
+            color: COLORS.text,
+            letterSpacing: -0.5,
+            marginBottom: 6,
+          }}
+        >
+          {reservation.eventTitle}
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.45,
+            color: COLORS.textSoft,
+            marginBottom: 14,
+          }}
+        >
+          {reservation.zoneName || reservation.zoneCode || "Reservation"}
+        </div>
+
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 22,
+            background: "#FFFFFF",
+            border: `1px solid ${COLORS.border}`,
+            display: "inline-grid",
+            placeItems: "center",
+            marginBottom: 14,
+          }}
+        >
+          <QRCodeSVG
+            value={`GuestLyst://reservation/${reservation.reservationCode}`}
+            size={220}
+            bgColor="#FFFFFF"
+            fgColor={COLORS.text}
+            level="M"
+            includeMargin
+          />
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 900,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: COLORS.textMuted,
+            marginBottom: 4,
+          }}
+        >
+          Reservation Code
+        </div>
+
+        <div
+          style={{
+            fontSize: 26,
+            fontWeight: 950,
+            letterSpacing: 1,
+            color: COLORS.text,
+          }}
+        >
+          {reservation.reservationCode}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: COLORS.textSoft,
+          }}
+        >
+          Show this QR at the door for reservation check-in.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ProfileClient() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -226,6 +582,15 @@ export default function ProfileClient() {
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [authMode, setAuthMode] = useState<"checking" | "guest" | "signed-in">("checking")
+
+  const [retrieveCode, setRetrieveCode] = useState("")
+  const [retrieveContact, setRetrieveContact] = useState("")
+  const [retrievedReservation, setRetrievedReservation] = useState<RetrievedReservation | null>(null)
+  const [linkedReservations, setLinkedReservations] = useState<RetrievedReservation[]>([])
+  const [retrievingReservation, setRetrievingReservation] = useState(false)
+  const [claimingReservation, setClaimingReservation] = useState(false)
+  const [loadingLinkedReservations, setLoadingLinkedReservations] = useState(false)
+  const [qrReservation, setQrReservation] = useState<RetrievedReservation | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -299,6 +664,38 @@ export default function ProfileClient() {
       isMounted = false
     }
   }, [router])
+
+  useEffect(() => {
+  if (authMode !== "signed-in") return
+
+  loadLinkedReservations()
+
+  if (typeof window === "undefined") return
+
+  const pendingRaw = window.sessionStorage.getItem("gf-pending-reservation-claim")
+  if (!pendingRaw) return
+
+  try {
+    const pending = JSON.parse(pendingRaw) as {
+      reservationCode?: string
+      contact?: string
+    }
+
+    if (pending.reservationCode && pending.contact) {
+      setRetrieveCode(pending.reservationCode)
+      setRetrieveContact(pending.contact)
+      window.sessionStorage.removeItem("gf-pending-reservation-claim")
+
+      window.setTimeout(() => {
+        handleClaimReservation()
+      }, 250)
+    }
+  } catch {
+    window.sessionStorage.removeItem("gf-pending-reservation-claim")
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [authMode])
+
 
   useEffect(() => {
     return () => {
@@ -464,6 +861,140 @@ export default function ProfileClient() {
     setSaveMessage("")
     setErrorMessage("")
   }
+
+  async function getAccessToken() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  return session?.access_token || ""
+}
+
+async function handleRetrieveReservation() {
+  setRetrievingReservation(true)
+  setErrorMessage("")
+  setSaveMessage("")
+  setRetrievedReservation(null)
+
+  try {
+    const response = await fetch("/api/reservations/retrieve", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reservationCode: retrieveCode,
+        contact: retrieveContact,
+      }),
+    })
+
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to retrieve reservation.")
+    }
+
+    setRetrievedReservation(data.reservation)
+    setSaveMessage("Reservation found.")
+  } catch (error) {
+    setErrorMessage(
+      error instanceof Error ? error.message : "Unable to retrieve reservation."
+    )
+  } finally {
+    setRetrievingReservation(false)
+  }
+}
+
+async function handleClaimReservation() {
+  const code = retrieveCode.trim()
+  const contact = retrieveContact.trim()
+
+  if (!code || !contact) {
+    setErrorMessage("Reservation code and email or phone are required.")
+    return
+  }
+
+  if (authMode !== "signed-in") {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        "gf-pending-reservation-claim",
+        JSON.stringify({
+          reservationCode: code,
+          contact,
+        })
+      )
+    }
+
+    router.push(`/login?next=${encodeURIComponent("/profile")}`)
+    return
+  }
+
+  setClaimingReservation(true)
+  setErrorMessage("")
+  setSaveMessage("")
+
+  try {
+    const token = await getAccessToken()
+
+    const response = await fetch("/api/reservations/claim", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        reservationCode: code,
+        contact,
+      }),
+    })
+
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to link reservation.")
+    }
+
+    setRetrievedReservation(data.reservation || null)
+    setSaveMessage("Reservation linked to your profile.")
+    await loadLinkedReservations()
+  } catch (error) {
+    setErrorMessage(
+      error instanceof Error ? error.message : "Unable to link reservation."
+    )
+  } finally {
+    setClaimingReservation(false)
+  }
+}
+
+async function loadLinkedReservations() {
+  if (authMode !== "signed-in") return
+
+  setLoadingLinkedReservations(true)
+
+  try {
+    const token = await getAccessToken()
+
+    const response = await fetch("/api/profile/reservations", {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    })
+
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to load saved reservations.")
+    }
+
+    setLinkedReservations(data?.reservations || [])
+  } catch (error) {
+    setErrorMessage(
+      error instanceof Error ? error.message : "Unable to load saved reservations."
+    )
+  } finally {
+    setLoadingLinkedReservations(false)
+  }
+}
 
   const inputBaseStyle: React.CSSProperties = {
     width: "100%",
@@ -737,6 +1268,136 @@ export default function ProfileClient() {
                 <div
                   style={{
                     marginTop: 18,
+                    padding: 14,
+                    borderRadius: 22,
+                    border: `1px solid ${COLORS.border}`,
+                    background: "rgba(255,255,255,0.76)",
+                    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+                    textAlign: "left",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 900,
+                      letterSpacing: 0.8,
+                      color: COLORS.textMuted,
+                      textTransform: "uppercase",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Retrieve Reservation
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: COLORS.textSoft,
+                      marginBottom: 12,
+                    }}
+                  >
+                    Enter your reservation code and email or phone to pull up your booking.
+                  </div>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <input
+                      value={retrieveCode}
+                      onChange={(e) => setRetrieveCode(e.target.value.toUpperCase())}
+                      placeholder="Reservation code"
+                      autoComplete="off"
+                      style={{
+                        ...inputBaseStyle,
+                        height: 48,
+                        borderRadius: 16,
+                        fontSize: 14,
+                      }}
+                    />
+
+                    <input
+                      value={retrieveContact}
+                      onChange={(e) => setRetrieveContact(e.target.value)}
+                      placeholder="Email or mobile number"
+                      autoComplete="email tel"
+                      style={{
+                        ...inputBaseStyle,
+                        height: 48,
+                        borderRadius: 16,
+                        fontSize: 14,
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleRetrieveReservation}
+                      disabled={
+                        retrievingReservation ||
+                        !retrieveCode.trim() ||
+                        !retrieveContact.trim()
+                      }
+                      style={{
+                        width: "100%",
+                        height: 48,
+                        border: "none",
+                        borderRadius: 18,
+                        background:
+                          retrievingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? "linear-gradient(180deg, #94A3B8 0%, #64748B 100%)"
+                            : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                        fontWeight: 900,
+                        cursor:
+                          retrievingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? "not-allowed"
+                            : "pointer",
+                        boxShadow: "0 10px 20px rgba(14,165,233,0.18)",
+                      }}
+                    >
+                      {retrievingReservation ? "Searching..." : "Retrieve Reservation"}
+                    </button>
+                  </div>
+
+                  {retrievedReservation ? (
+                    <ReservationMiniCard
+                      reservation={retrievedReservation}
+                      onShowQr={() => setQrReservation(retrievedReservation)}
+                      action={
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleClaimReservation()
+                          }}
+                          disabled={claimingReservation}
+                          style={{
+                            width: "100%",
+                            height: 46,
+                            border: "none",
+                            borderRadius: 16,
+                            background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                            color: "#FFFFFF",
+                            fontSize: 14,
+                            fontWeight: 900,
+                            cursor: claimingReservation ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {claimingReservation
+                            ? "Saving..."
+                            : "Sign In / Create Account to Save"}
+                        </button>
+                      }
+                    />
+                  ) : null}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 18,
                     fontSize: 12.5,
                     lineHeight: 1.5,
                     color: COLORS.textMuted,
@@ -746,6 +1407,10 @@ export default function ProfileClient() {
                 </div>
               </div>
             </div>
+              <ReservationQrModal
+              reservation={qrReservation}
+              onClose={() => setQrReservation(null)}
+            />
           </div>
         </div>
       </MobileShell>
@@ -1233,6 +1898,153 @@ export default function ProfileClient() {
                 </div>
               </label>
 
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: 14,
+                  borderRadius: 22,
+                  border: `1px solid ${COLORS.border}`,
+                  background: "rgba(255,255,255,0.72)",
+                  boxShadow: "0 10px 22px rgba(15,23,42,0.04)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 0.8,
+                    color: COLORS.textMuted,
+                    textTransform: "uppercase",
+                    marginBottom: 8,
+                  }}
+                >
+                  Retrieve / Link Reservation
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: COLORS.textSoft,
+                    marginBottom: 12,
+                  }}
+                >
+                  Purchased as a guest? Enter your reservation code and checkout email or phone to link it to this profile.
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <input
+                    value={retrieveCode}
+                    onChange={(e) => setRetrieveCode(e.target.value.toUpperCase())}
+                    placeholder="Reservation code"
+                    autoComplete="off"
+                    style={{
+                      ...inputBaseStyle,
+                      height: 48,
+                      borderRadius: 16,
+                      fontSize: 14,
+                      opacity: 1,
+                    }}
+                  />
+
+                  <input
+                    value={retrieveContact}
+                    onChange={(e) => setRetrieveContact(e.target.value)}
+                    placeholder="Email or mobile number"
+                    autoComplete="email tel"
+                    style={{
+                      ...inputBaseStyle,
+                      height: 48,
+                      borderRadius: 16,
+                      fontSize: 14,
+                      opacity: 1,
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleRetrieveReservation}
+                      disabled={
+                        retrievingReservation ||
+                        !retrieveCode.trim() ||
+                        !retrieveContact.trim()
+                      }
+                      style={{
+                        width: "100%",
+                        height: 46,
+                        borderRadius: 16,
+                        border: `1px solid ${COLORS.border}`,
+                        background: "rgba(255,255,255,0.92)",
+                        color: COLORS.primaryHover,
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor:
+                          retrievingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? "not-allowed"
+                            : "pointer",
+                        opacity:
+                          retrievingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? 0.62
+                            : 1,
+                      }}
+                    >
+                      {retrievingReservation ? "Searching..." : "Find"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClaimReservation}
+                      disabled={
+                        claimingReservation ||
+                        !retrieveCode.trim() ||
+                        !retrieveContact.trim()
+                      }
+                      style={{
+                        width: "100%",
+                        height: 46,
+                        border: "none",
+                        borderRadius: 16,
+                        background:
+                          claimingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? "linear-gradient(180deg, #94A3B8 0%, #64748B 100%)"
+                            : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryHover} 100%)`,
+                        color: "#FFFFFF",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor:
+                          claimingReservation ||
+                          !retrieveCode.trim() ||
+                          !retrieveContact.trim()
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      {claimingReservation ? "Linking..." : "Link"}
+                    </button>
+                  </div>
+                </div>
+
+                {retrievedReservation ? (
+                  <ReservationMiniCard
+                    reservation={retrievedReservation}
+                    onShowQr={() => setQrReservation(retrievedReservation)}
+                  />
+                ) : null}
+              </div>
+
               {errorMessage ? (
                 <div
                   style={{
@@ -1301,6 +2113,90 @@ export default function ProfileClient() {
 
               <div
                 style={{
+                  marginTop: 18,
+                  padding: 14,
+                  borderRadius: 22,
+                  border: `1px solid ${COLORS.border}`,
+                  background: "rgba(255,255,255,0.72)",
+                  boxShadow: "0 10px 22px rgba(15,23,42,0.04)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    alignItems: "center",
+                    marginBottom: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 900,
+                      letterSpacing: 0.8,
+                      color: COLORS.textMuted,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Saved Reservations
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={loadLinkedReservations}
+                    disabled={loadingLinkedReservations}
+                    style={{
+                      height: 34,
+                      borderRadius: 999,
+                      border: `1px solid ${COLORS.border}`,
+                      background: "rgba(255,255,255,0.92)",
+                      color: COLORS.primaryHover,
+                      padding: "0 12px",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: loadingLinkedReservations ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {loadingLinkedReservations ? "Loading..." : "Refresh"}
+                  </button>
+                </div>
+
+                {loadingLinkedReservations ? (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: COLORS.textSoft,
+                    }}
+                  >
+                    Loading saved reservations...
+                  </div>
+                ) : linkedReservations.length === 0 ? (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: COLORS.textSoft,
+                    }}
+                  >
+                    No saved reservations yet. Use Retrieve / Link Reservation above to attach a guest purchase to your profile.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {linkedReservations.map((reservation) => (
+                      <ReservationMiniCard
+                        key={reservation.id}
+                        reservation={reservation}
+                        onShowQr={() => setQrReservation(reservation)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
@@ -1315,7 +2211,8 @@ export default function ProfileClient() {
                     background: "rgba(100,116,139,0.18)",
                   }}
                 />
-                <div
+                {/* REMOVING GOOGLE AND APPLE LOGIN BUTTONS FOR NOW */}
+                {/* <div
                   style={{
                     fontSize: 12,
                     fontWeight: 800,
@@ -1325,7 +2222,7 @@ export default function ProfileClient() {
                   }}
                 >
                   OR CONTINUE WITH
-                </div>
+                </div> */}
                 <div
                   style={{
                     height: 1,
@@ -1335,7 +2232,7 @@ export default function ProfileClient() {
                 />
               </div>
 
-              <button
+              {/* <button
                 type="button"
                 aria-label="Continue with Google"
                 title="Continue with Google"
@@ -1358,9 +2255,9 @@ export default function ProfileClient() {
               >
                 <GoogleIcon />
                 <span>Continue with Google</span>
-              </button>
+              </button> */}
 
-              <button
+              {/* <button
                 type="button"
                 aria-label="Continue with Apple"
                 title="Continue with Apple"
@@ -1393,7 +2290,7 @@ export default function ProfileClient() {
                   <path d="M16.37 12.09c.02 2.13 1.87 2.84 1.89 2.85-.02.05-.29 1-.95 1.98-.57.84-1.17 1.67-2.1 1.69-.92.02-1.22-.54-2.28-.54-1.06 0-1.39.52-2.26.56-.89.03-1.57-.89-2.15-1.72-1.18-1.71-2.08-4.83-.87-6.94.6-1.05 1.67-1.71 2.82-1.73.88-.02 1.71.59 2.28.59.56 0 1.61-.73 2.72-.62.47.02 1.79.19 2.64 1.43-.07.04-1.58.92-1.56 2.45Zm-1.92-4.52c.48-.58.81-1.39.72-2.2-.69.03-1.53.46-2.03 1.04-.45.52-.84 1.34-.73 2.13.77.06 1.56-.39 2.04-.97Z" />
                 </svg>
                 <span>Continue with Apple</span>
-              </button>
+              </button> */}
 
               <button
                 type="button"
@@ -1491,6 +2388,10 @@ export default function ProfileClient() {
               </div>
             </div>
           ) : null}
+          <ReservationQrModal
+            reservation={qrReservation}
+            onClose={() => setQrReservation(null)}
+          />
         </div>
       </div>
     </MobileShell>
