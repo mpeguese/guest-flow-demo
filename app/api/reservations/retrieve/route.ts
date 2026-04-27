@@ -3,8 +3,9 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 type RetrieveBody = {
-  reservationCode?: string
-  contact?: string
+  email?: string
+  phone?: string
+  contact?: string // backwards-compatible fallback if one field is sent
 }
 
 type ReservationRow = {
@@ -25,6 +26,18 @@ type ReservationRow = {
   deposit_amount_paid: number | string | null
   guest_count: number | null
   session: string | null
+}
+
+type QrCodeRow = {
+  id: string
+  reservation_id: string | null
+  booking_code: string
+  item_type: "reservation" | "zone" | "pass" | "ticket" | string
+  item_ref_id: string | null
+  label: string | null
+  qr_value: string
+  status: string
+  scanned_at: string | null
 }
 
 function getSupabaseAdmin() {
@@ -53,18 +66,22 @@ function normalizePhone(value: string | null | undefined) {
   return clean(value).replace(/\D/g, "")
 }
 
-function contactsMatch(input: string, reservation: ReservationRow) {
-  const contact = clean(input).toLowerCase()
-  const email = clean(reservation.email).toLowerCase()
+function looksLikeEmail(value: string) {
+  return value.includes("@")
+}
 
-  if (contact && email && contact === email) return true
+function phoneMatches(inputPhone: string, storedPhone: string | null) {
+  const inputDigits = normalizePhone(inputPhone)
+  const storedDigits = normalizePhone(storedPhone)
 
-  const inputPhone = normalizePhone(contact)
-  const reservationPhone = normalizePhone(reservation.phone)
+  if (!inputDigits || !storedDigits) return false
 
-  if (inputPhone && reservationPhone && inputPhone === reservationPhone) return true
-
-  return false
+  // Exact match, or allow matching the last 10 digits for +1 / formatted phone variants.
+  return (
+    storedDigits === inputDigits ||
+    storedDigits.endsWith(inputDigits) ||
+    inputDigits.endsWith(storedDigits)
+  )
 }
 
 async function decorateReservation(
@@ -116,6 +133,31 @@ async function decorateReservation(
     zoneCode = zone?.code || null
   }
 
+  const { data: qrRows, error: qrError } = await supabase
+    .from("reservation_qr_codes")
+    .select(
+      "id, reservation_id, booking_code, item_type, item_ref_id, label, qr_value, status, scanned_at"
+    )
+    .eq("booking_code", reservation.reservation_code || "")
+    .order("created_at", { ascending: true })
+    .returns<QrCodeRow[]>()
+
+  if (qrError) {
+    console.error("Failed to fetch QR codes for reservation:", qrError.message)
+  }
+
+  const qrCodes = (qrRows || []).map((qr) => ({
+    id: qr.id,
+    reservationId: qr.reservation_id,
+    bookingCode: qr.booking_code,
+    itemType: qr.item_type,
+    itemRefId: qr.item_ref_id,
+    label: qr.label,
+    qrValue: qr.qr_value,
+    status: qr.status,
+    scannedAt: qr.scanned_at,
+  }))
+
   return {
     id: reservation.id,
     reservationCode: reservation.reservation_code || "",
@@ -134,6 +176,7 @@ async function decorateReservation(
     amountPaid: Number(reservation.deposit_amount_paid || 0),
     confirmedAt: reservation.confirmed_at,
     createdAt: reservation.created_at,
+    qrCodes,
   }
 }
 
@@ -141,61 +184,112 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as RetrieveBody
 
-    const reservationCode = clean(body.reservationCode).toUpperCase()
-    const contact = clean(body.contact)
+    const rawContact = clean(body.contact)
+    const emailInput = clean(body.email || (looksLikeEmail(rawContact) ? rawContact : "")).toLowerCase()
+    const phoneInput = clean(body.phone || (!looksLikeEmail(rawContact) ? rawContact : ""))
 
-    if (!reservationCode) {
+    if (!emailInput && !phoneInput) {
       return NextResponse.json(
-        { error: "Reservation code is required." },
-        { status: 400 }
-      )
-    }
-
-    if (!contact) {
-      return NextResponse.json(
-        { error: "Email or phone is required." },
+        { error: "Email or phone number is required." },
         { status: 400 }
       )
     }
 
     const supabase = getSupabaseAdmin()
 
-    const { data: reservation, error } = await supabase
-      .from("reservations")
-      .select(
-        "id, event_id, event_date_id, user_id, guest_name, email, phone, reservation_code, status, confirmed_at, created_at, venue_zone_id, event_zone_id, zone_source, deposit_amount_paid, guest_count, session"
-      )
-      .eq("reservation_code", reservationCode)
-      .maybeSingle<ReservationRow>()
+    let reservations: ReservationRow[] = []
 
-    if (error) {
-      return NextResponse.json(
-        {
-          error: "Unable to retrieve reservation.",
-          details: error.message,
-        },
-        { status: 500 }
-      )
+    if (emailInput) {
+      const { data, error } = await supabase
+        .from("reservations")
+        .select(
+          "id, event_id, event_date_id, user_id, guest_name, email, phone, reservation_code, status, confirmed_at, created_at, venue_zone_id, event_zone_id, zone_source, deposit_amount_paid, guest_count, session"
+        )
+        .eq("email", emailInput)
+        .not("reservation_code", "is", null)
+        .in("status", ["confirmed", "checked_in"])
+        .order("created_at", { ascending: false })
+        .limit(25)
+        .returns<ReservationRow[]>()
+
+      if (error) {
+        return NextResponse.json(
+          {
+            error: "Unable to retrieve reservations by email.",
+            details: error.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      reservations = data || []
     }
 
-    if (!reservation || !contactsMatch(contact, reservation)) {
+    if (phoneInput) {
+      const phoneDigits = normalizePhone(phoneInput)
+
+      const { data, error } = await supabase
+        .from("reservations")
+        .select(
+          "id, event_id, event_date_id, user_id, guest_name, email, phone, reservation_code, status, confirmed_at, created_at, venue_zone_id, event_zone_id, zone_source, deposit_amount_paid, guest_count, session"
+        )
+        .not("reservation_code", "is", null)
+        .in("status", ["confirmed", "checked_in"])
+        .order("created_at", { ascending: false })
+        .limit(100)
+        .returns<ReservationRow[]>()
+
+      if (error) {
+        return NextResponse.json(
+          {
+            error: "Unable to retrieve reservations by phone.",
+            details: error.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      const phoneMatchesList = (data || []).filter((reservation) =>
+        phoneMatches(phoneDigits, reservation.phone)
+      )
+
+      const existingIds = new Set(reservations.map((reservation) => reservation.id))
+      phoneMatchesList.forEach((reservation) => {
+        if (!existingIds.has(reservation.id)) {
+          reservations.push(reservation)
+        }
+      })
+    }
+
+    if (emailInput && phoneInput) {
+      reservations = reservations.filter((reservation) => {
+        const emailOk = clean(reservation.email).toLowerCase() === emailInput
+        const phoneOk = phoneMatches(phoneInput, reservation.phone)
+        return emailOk || phoneOk
+      })
+    }
+
+    if (reservations.length === 0) {
       return NextResponse.json(
-        { error: "No reservation found with that code and contact." },
+        { error: "No reservations found for that email or phone." },
         { status: 404 }
       )
     }
 
-    const decorated = await decorateReservation(supabase, reservation)
+    const decorated = await Promise.all(
+      reservations.map((reservation) => decorateReservation(supabase, reservation))
+    )
 
     return NextResponse.json({
       success: true,
-      reservation: decorated,
+      reservations: decorated,
+      reservation: decorated[0] || null,
     })
   } catch (error) {
     console.error("retrieve reservation error", error)
 
     return NextResponse.json(
-      { error: "Unexpected error retrieving reservation." },
+      { error: "Unexpected error retrieving reservations." },
       { status: 500 }
     )
   }

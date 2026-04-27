@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js"
 type ConfirmReservationItem = {
   id: string
   itemType?: "zone" | "pass"
+  productId?: string
   zoneId: string
   zoneName?: string
   section?: string
@@ -39,10 +40,37 @@ function generateReservationCode() {
   return out
 }
 
+function generateQrCode(prefix: string) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  let out = prefix
+  for (let i = 0; i < 12; i += 1) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return out
+}
+
 function inferItemType(item: Pick<ConfirmReservationItem, "itemType" | "session">) {
   if (item.itemType) return item.itemType
   if (item.session === "entry") return "pass"
   return "zone"
+}
+
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey =
+    process.env.GFDEV_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase server environment variables.")
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
 }
 
 export async function POST(req: Request) {
@@ -63,24 +91,15 @@ export async function POST(req: Request) {
       )
     }
 
+    const supabase = getSupabaseAdmin()
+
     const zoneItems = items.filter((item) => inferItemType(item) === "zone")
+    const passItems = items.filter((item) => inferItemType(item) === "pass")
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey =
-      process.env.GFDEV_SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        { error: "Missing Supabase server environment variables." },
-        { status: 500 }
-      )
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-
-    const reservationCode = generateReservationCode()
+    const bookingCode = generateReservationCode()
     const nowIso = new Date().toISOString()
+
+    const confirmedReservationIds: string[] = []
 
     for (const item of zoneItems) {
       if (!item.reservationId) {
@@ -114,8 +133,10 @@ export async function POST(req: Request) {
       }
 
       const reservation = reservationResult.data
+      const finalReservationCode = reservation.reservation_code || bookingCode
 
       if (reservation.status === "confirmed" || reservation.status === "checked_in") {
+        confirmedReservationIds.push(reservation.id)
         continue
       }
 
@@ -144,19 +165,86 @@ export async function POST(req: Request) {
           status: "confirmed",
           confirmed_at: nowIso,
           hold_expires_at: null,
-          reservation_code: reservation.reservation_code || reservationCode,
+          reservation_code: finalReservationCode,
           deposit_amount_paid:
             typeof item.price === "number" && Number.isFinite(item.price) ? item.price : 0,
+          updated_at: nowIso,
         })
         .eq("id", item.reservationId)
-        .select("id")
+        .select("id, reservation_code")
         .single()
 
-      if (updateResult.error) {
+      if (updateResult.error || !updateResult.data) {
         return NextResponse.json(
           {
             error: "Failed to confirm reservation.",
-            details: updateResult.error.message,
+            details: updateResult.error?.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      confirmedReservationIds.push(updateResult.data.id)
+
+      const qrValue = `GuestLyst://reservation/${finalReservationCode}`
+
+      const qrInsertResult = await supabase
+        .from("reservation_qr_codes")
+        .upsert(
+          {
+            reservation_id: updateResult.data.id,
+            booking_code: finalReservationCode,
+            payment_intent: paymentIntent,
+            item_type: "reservation",
+            item_ref_id: updateResult.data.id,
+            label: item.zoneName || item.section || "Reservation",
+            qr_value: qrValue,
+            status: "active",
+            updated_at: nowIso,
+          },
+          {
+            onConflict: "qr_value",
+          }
+        )
+
+      if (qrInsertResult.error) {
+        return NextResponse.json(
+          {
+            error: "Reservation confirmed, but QR creation failed.",
+            details: qrInsertResult.error.message,
+          },
+          { status: 500 }
+        )
+      }
+    }
+
+    const primaryBookingCode = bookingCode
+
+    if (passItems.length > 0) {
+      const passQrRows = passItems.map((item, index) => {
+        const passQrCode = generateQrCode("PASS-")
+        return {
+          reservation_id: null,
+          booking_code: primaryBookingCode,
+          payment_intent: paymentIntent,
+          item_type: "pass",
+          item_ref_id: item.productId || item.zoneId || item.id,
+          label: item.zoneName || item.section || `Pass ${index + 1}`,
+          qr_value: `GuestLyst://pass/${passQrCode}`,
+          status: "active",
+          updated_at: nowIso,
+        }
+      })
+
+      const passQrInsertResult = await supabase
+        .from("reservation_qr_codes")
+        .insert(passQrRows)
+
+      if (passQrInsertResult.error) {
+        return NextResponse.json(
+          {
+            error: "Payment confirmed, but pass QR creation failed.",
+            details: passQrInsertResult.error.message,
           },
           { status: 500 }
         )
@@ -165,10 +253,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      reservationCode,
-      confirmedReservationIds: zoneItems
-        .map((item) => item.reservationId)
-        .filter((value): value is string => Boolean(value)),
+      reservationCode: primaryBookingCode,
+      bookingCode: primaryBookingCode,
+      confirmedReservationIds,
     })
   } catch (error) {
     console.error("confirm reservation error", error)

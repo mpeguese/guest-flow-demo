@@ -22,6 +22,18 @@ type ReservationRow = {
   session: string | null
 }
 
+type QrCodeRow = {
+  id: string
+  reservation_id: string | null
+  booking_code: string
+  item_type: "reservation" | "zone" | "pass" | "ticket" | string
+  item_ref_id: string | null
+  label: string | null
+  qr_value: string
+  status: string
+  scanned_at: string | null
+}
+
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey =
@@ -89,6 +101,27 @@ async function decorateReservation(
     zoneCode = zone?.code || null
   }
 
+    const { data: qrRows } = await supabase
+    .from("reservation_qr_codes")
+    .select(
+      "id, reservation_id, booking_code, item_type, item_ref_id, label, qr_value, status, scanned_at"
+    )
+    .eq("booking_code", reservation.reservation_code || "")
+    .order("created_at", { ascending: true })
+    .returns<QrCodeRow[]>()
+
+  const qrCodes = (qrRows || []).map((qr) => ({
+    id: qr.id,
+    reservationId: qr.reservation_id,
+    bookingCode: qr.booking_code,
+    itemType: qr.item_type,
+    itemRefId: qr.item_ref_id,
+    label: qr.label,
+    qrValue: qr.qr_value,
+    status: qr.status,
+    scannedAt: qr.scanned_at,
+  }))
+
   return {
     id: reservation.id,
     reservationCode: reservation.reservation_code || "",
@@ -107,6 +140,7 @@ async function decorateReservation(
     amountPaid: Number(reservation.deposit_amount_paid || 0),
     confirmedAt: reservation.confirmed_at,
     createdAt: reservation.created_at,
+    qrCodes,
   }
 }
 

@@ -78,7 +78,19 @@ type RetrievedReservation = {
   amountPaid: number
   confirmedAt: string | null
   createdAt: string | null
+  qrCodes?: {
+    id: string
+    reservationId: string | null
+    bookingCode: string
+    itemType: string
+    itemRefId: string | null
+    label: string | null
+    qrValue: string
+    status: string
+    scannedAt: string | null
+  }[]
 }
+
 
 function splitStoredPhone(phone: string | null) {
   if (!phone) {
@@ -412,7 +424,46 @@ function ReservationQrModal({
   reservation: RetrievedReservation | null
   onClose: () => void
 }) {
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [reservation?.id])
+
   if (!reservation) return null
+
+  const fallbackQr = reservation.reservationCode
+    ? [
+        {
+          id: reservation.id,
+          itemType: "reservation",
+          label: reservation.zoneName || reservation.zoneCode || "Reservation",
+          qrValue: `GuestLyst://reservation/${reservation.reservationCode}`,
+          status: reservation.status,
+        },
+      ]
+    : []
+
+  const qrCodes =
+    reservation.qrCodes && reservation.qrCodes.length > 0
+      ? reservation.qrCodes
+      : fallbackQr
+
+  const activeQr = qrCodes[activeIndex] || qrCodes[0]
+
+  function goPrev() {
+    setActiveIndex((current) =>
+      current === 0 ? qrCodes.length - 1 : current - 1
+    )
+  }
+
+  function goNext() {
+    setActiveIndex((current) =>
+      current === qrCodes.length - 1 ? 0 : current + 1
+    )
+  }
+
+  if (!activeQr) return null
 
   return (
     <div
@@ -500,7 +551,7 @@ function ReservationQrModal({
             marginBottom: 14,
           }}
         >
-          {reservation.zoneName || reservation.zoneCode || "Reservation"}
+          {activeQr.label || reservation.zoneName || reservation.zoneCode || "Reservation"}
         </div>
 
         <div
@@ -515,7 +566,7 @@ function ReservationQrModal({
           }}
         >
           <QRCodeSVG
-            value={`GuestLyst://reservation/${reservation.reservationCode}`}
+            value={activeQr.qrValue}
             size={220}
             bgColor="#FFFFFF"
             fgColor={COLORS.text}
@@ -534,29 +585,90 @@ function ReservationQrModal({
             marginBottom: 4,
           }}
         >
-          Reservation Code
+          {activeQr.itemType === "pass" ? "Pass QR" : "Reservation Code"}
         </div>
 
         <div
           style={{
-            fontSize: 26,
+            fontSize: 24,
             fontWeight: 950,
             letterSpacing: 1,
             color: COLORS.text,
+            wordBreak: "break-word",
           }}
         >
-          {reservation.reservationCode}
+          {activeQr.itemType === "pass"
+            ? activeQr.qrValue.replace("GuestLyst://pass/", "")
+            : reservation.reservationCode}
         </div>
+
+        {qrCodes.length > 1 ? (
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <button
+              type="button"
+              onClick={goPrev}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                border: `1px solid ${COLORS.border}`,
+                background: "rgba(255,255,255,0.92)",
+                color: COLORS.primaryHover,
+                fontSize: 20,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              ‹
+            </button>
+
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 900,
+                color: COLORS.textMuted,
+              }}
+            >
+              {activeIndex + 1} of {qrCodes.length}
+            </div>
+
+            <button
+              type="button"
+              onClick={goNext}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                border: `1px solid ${COLORS.border}`,
+                background: "rgba(255,255,255,0.92)",
+                color: COLORS.primaryHover,
+                fontSize: 20,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              ›
+            </button>
+          </div>
+        ) : null}
 
         <div
           style={{
-            marginTop: 10,
+            marginTop: 12,
             fontSize: 13,
             lineHeight: 1.5,
             color: COLORS.textSoft,
           }}
         >
-          Show this QR at the door for reservation check-in.
+          Show this QR at the door or reservation check-in.
         </div>
       </div>
     </div>
@@ -1898,7 +2010,7 @@ async function loadLinkedReservations() {
                 </div>
               </label>
 
-              <div
+              {/* <div
                 style={{
                   marginTop: 4,
                   padding: 14,
@@ -2043,7 +2155,7 @@ async function loadLinkedReservations() {
                     onShowQr={() => setQrReservation(retrievedReservation)}
                   />
                 ) : null}
-              </div>
+              </div> */}
 
               {errorMessage ? (
                 <div
@@ -2108,10 +2220,10 @@ async function loadLinkedReservations() {
                   opacity: savingProfile || loadingProfile || !isEditing ? 0.78 : 1,
                 }}
               >
-                {savingProfile ? "Saving..." : "Save & Continue"}
+                {savingProfile ? "Saving..." : "Save"}
               </button>
 
-              <div
+              {/* <div
                 style={{
                   marginTop: 18,
                   padding: 14,
@@ -2193,7 +2305,7 @@ async function loadLinkedReservations() {
                     ))}
                   </div>
                 )}
-              </div>
+              </div> */}
 
               <div
                 style={{
@@ -2291,6 +2403,26 @@ async function loadLinkedReservations() {
                 </svg>
                 <span>Continue with Apple</span>
               </button> */}
+
+              <button
+                type="button"
+                onClick={() => router.push("/profile/reservations")}
+                style={{
+                  width: "100%",
+                  height: 52,
+                  marginTop: 14,
+                  borderRadius: 20,
+                  border: `1px solid ${COLORS.border}`,
+                  background: "rgba(255,255,255,0.92)",
+                  color: COLORS.primaryHover,
+                  fontSize: 15,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+                }}
+              >
+                Retrieve / Link Reservations
+              </button>
 
               <button
                 type="button"
